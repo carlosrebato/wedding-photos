@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 
 async function uploadFile(file: File): Promise<string | null> {
@@ -23,7 +23,21 @@ async function uploadFile(file: File): Promise<string | null> {
       .from('wedding-photos')
       .getPublicUrl(fileName);
 
-    console.log('✅ Subido:', publicUrl);
+    console.log('✅ Subido a Storage:', publicUrl);
+
+    const { error: dbError } = await supabase
+      .from('uploads')
+      .insert({
+        photo_url: publicUrl,
+        guest_name: null
+      });
+
+    if (dbError) {
+      console.error('❌ Error guardando en DB:', dbError);
+      return null;
+    }
+
+    console.log('✅ Guardado en DB');
     return publicUrl;
 
   } catch (error) {
@@ -32,9 +46,38 @@ async function uploadFile(file: File): Promise<string | null> {
   }
 }
 
+async function loadPhotos(): Promise<string[]> {
+  try {
+    const { data, error } = await supabase
+      .from('uploads')
+      .select('photo_url')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ Error cargando fotos:', error);
+      return [];
+    }
+
+    console.log('📷 Fotos cargadas:', data.length);
+    return data.map(row => row.photo_url);
+
+  } catch (error) {
+    console.error('❌ Error:', error);
+    return [];
+  }
+}
+
 export default function Home() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
+
+  useEffect(() => {
+    async function fetchPhotos() {
+      const photos = await loadPhotos();
+      setUploadedUrls(photos);
+    }
+    fetchPhotos();
+  }, []);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -54,7 +97,7 @@ export default function Home() {
         }
       }
       
-      setUploadedUrls(urls);
+      setUploadedUrls(prev => [...urls, ...prev]);
       console.log('🎉 Todas las fotos subidas!');
     }
   };
@@ -104,7 +147,7 @@ export default function Home() {
       {uploadedUrls.length > 0 && (
         <div className="w-full max-w-4xl mt-8">
           <h2 className="text-2xl font-bold text-center mb-6">
-            Fotos subidas
+            Fotos subidas ({uploadedUrls.length})
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
             {uploadedUrls.map((url, index) => (
