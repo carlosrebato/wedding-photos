@@ -6,29 +6,117 @@ import Image from 'next/image';
 import Lottie from 'lottie-react';
 import uploadArrowAnimation from '@/public/animations/upload-arrow.json';
 import checkSuccessAnimation from '@/public/animations/check-success.json';
+import imageCompression from 'browser-image-compression';
 
 async function uploadFile(file: File, guestName: string | null): Promise<string | null> {
   try {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+    // Si no es imagen, subir tal cual
+    if (!file.type.startsWith('image/')) {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      
+      console.log('⬆️ Subiendo archivo:', fileName);
+
+      const { data, error } = await supabase.storage
+        .from('wedding-photos')
+        .upload(fileName, file);
+
+      if (error) {
+        console.error('❌ Error subiendo:', error);
+        return null;
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('wedding-photos')
+        .getPublicUrl(fileName);
+
+      const { error: dbError } = await supabase
+        .from('uploads')
+        .insert({
+          photo_url: publicUrl,
+          guest_name: guestName
+        });
+
+      if (dbError) {
+        console.error('❌ Error guardando en DB:', dbError);
+        return null;
+      }
+
+      return publicUrl;
+    }
+
+    // PARA IMÁGENES: Generar 3 versiones
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(7);
+    const baseFileName = `${timestamp}-${randomId}`;
+
+    console.log('📦 Procesando imagen:', file.name, '-', (file.size / 1024 / 1024).toFixed(2), 'MB');
+
+    // 1. SUBIR ORIGINAL (sin comprimir)
+    const originalFileName = `original_${baseFileName}.jpg`;
+    console.log('⬆️ Subiendo ORIGINAL...');
     
-    console.log('⬆️ Subiendo:', fileName);
-
-    const { data, error } = await supabase.storage
+    const { error: originalError } = await supabase.storage
       .from('wedding-photos')
-      .upload(fileName, file);
+      .upload(originalFileName, file);
 
-    if (error) {
-      console.error('❌ Error subiendo:', error);
+    if (originalError) {
+      console.error('❌ Error subiendo original:', originalError);
       return null;
     }
 
+    // 2. GENERAR Y SUBIR VERSIÓN WEB (para modal)
+    console.log('🔄 Generando versión WEB...');
+    const webOptions = {
+      maxSizeMB: 0.5,
+      maxWidthOrHeight: 1920,
+      useWebWorker: true,
+      fileType: 'image/jpeg'
+    };
+
+    const webFile = await imageCompression(file, webOptions);
+    const webFileName = `web_${baseFileName}.jpg`;
+    console.log('⬆️ Subiendo WEB:', (webFile.size / 1024).toFixed(0), 'KB');
+
+    const { error: webError } = await supabase.storage
+      .from('wedding-photos')
+      .upload(webFileName, webFile);
+
+    if (webError) {
+      console.error('❌ Error subiendo web:', webError);
+      return null;
+    }
+
+    // 3. GENERAR Y SUBIR THUMBNAIL (para galería)
+    console.log('🔄 Generando THUMBNAIL...');
+    const thumbOptions = {
+      maxSizeMB: 0.05,
+      maxWidthOrHeight: 400,
+      useWebWorker: true,
+      fileType: 'image/jpeg'
+    };
+
+    const thumbFile = await imageCompression(file, thumbOptions);
+    const thumbFileName = `thumb_${baseFileName}.jpg`;
+    console.log('⬆️ Subiendo THUMBNAIL:', (thumbFile.size / 1024).toFixed(0), 'KB');
+
+    const { error: thumbError } = await supabase.storage
+      .from('wedding-photos')
+      .upload(thumbFileName, thumbFile);
+
+    if (thumbError) {
+      console.error('❌ Error subiendo thumbnail:', thumbError);
+      return null;
+    }
+
+    // Obtener URL pública del THUMBNAIL (es la que se guarda en la DB)
     const { data: { publicUrl } } = supabase.storage
       .from('wedding-photos')
-      .getPublicUrl(fileName);
+      .getPublicUrl(thumbFileName);
 
-    console.log('✅ Subido a Storage:', publicUrl);
+    console.log('✅ 3 versiones subidas correctamente');
 
+    // Guardar en base de datos (con URL del thumbnail)
     const { error: dbError } = await supabase
       .from('uploads')
       .insert({
@@ -74,6 +162,11 @@ async function loadPhotos(): Promise<PhotoData[]> {
     console.error('❌ Error:', error);
     return [];
   }
+}
+
+// Función helper para obtener versión web de una URL de thumbnail
+function getWebUrl(thumbUrl: string): string {
+  return thumbUrl.replace('thumb_', 'web_');
 }
 
 export default function Home() {
@@ -380,46 +473,46 @@ export default function Home() {
     <>
       {/* Modal de bienvenida */}
       {showModal && (
-         <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-        <div className="rounded-lg shadow-xl max-w-md w-full p-6 sm:p-8" style={{ backgroundColor: '#F4EAE3' }}>
-          <h2 className="text-2xl font-bold mb-4 text-center" style={{ color: '#6E0005' }}>
-            ¡Hola! 💕
-          </h2>
-          
-          <p className="mb-6 text-center" style={{ color: '#6E0005' }}>
-            Comparte tus mejores fotos de la boda. Los vídeos, ¡todos bienvenidos!
-          </p>
-    
-          <form onSubmit={handleNameSubmit}>
-            <label className="block mb-4">
-              <span className="text-sm font-medium block mb-2" style={{ color: '#6E0005' }}>
-                Tu nombre
-              </span>
-              <input
-                type="text"
-                name="guestName"
-                required
-                placeholder="Ej: María"
-                className="w-full px-4 py-3 border rounded-lg"
-                style={{ 
-                  backgroundColor: 'white',
-                  borderColor: '#6E0005',
-                  color: '#6E0005'
-                }}
-              />
-            </label>
-    
-            <button
-              type="submit"
-              className="w-full text-white py-3 rounded-lg font-semibold transition-opacity hover:opacity-90"
-              style={{ backgroundColor: '#364136' }}
-            >
-              Continuar
-            </button>
-          </form>
+        <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+          <div className="rounded-lg shadow-xl max-w-md w-full p-6 sm:p-8" style={{ backgroundColor: '#F4EAE3' }}>
+            <h2 className="text-2xl font-bold mb-4 text-center" style={{ color: '#6E0005' }}>
+              ¡Hola! 💕
+            </h2>
+            
+            <p className="mb-6 text-center" style={{ color: '#6E0005' }}>
+              Comparte tus mejores fotos de la boda. Los vídeos, ¡todos bienvenidos!
+            </p>
+      
+            <form onSubmit={handleNameSubmit}>
+              <label className="block mb-4">
+                <span className="text-sm font-medium block mb-2" style={{ color: '#6E0005' }}>
+                  Tu nombre
+                </span>
+                <input
+                  type="text"
+                  name="guestName"
+                  required
+                  placeholder="Ej: María"
+                  className="w-full px-4 py-3 border rounded-lg"
+                  style={{ 
+                    backgroundColor: 'white',
+                    borderColor: '#6E0005',
+                    color: '#6E0005'
+                  }}
+                />
+              </label>
+      
+              <button
+                type="submit"
+                className="w-full text-white py-3 rounded-lg font-semibold transition-opacity hover:opacity-90"
+                style={{ backgroundColor: '#364136' }}
+              >
+                Continuar
+              </button>
+            </form>
+          </div>
         </div>
-      </div>
-    )}
+      )}
 
       {/* Modal de confirmación de cancelar */}
       {showCancelModal && (
@@ -523,10 +616,10 @@ export default function Home() {
               ‹
             </button>
 
-            {/* Imagen */}
+            {/* Imagen - USA VERSIÓN WEB */}
             <div className="max-w-4xl max-h-full flex flex-col items-center">
               <img
-                src={photos[selectedPhotoIndex].photo_url}
+                src={getWebUrl(photos[selectedPhotoIndex].photo_url)}
                 alt="Foto"
                 className="max-w-full max-h-[70vh] object-contain rounded-lg"
               />
@@ -578,7 +671,7 @@ export default function Home() {
 
       {/* Header sticky */}
       <header className="sticky top-0 z-40" style={{ backgroundColor: '#F4EAE3' }}>
-  <div className="flex items-center justify-center py-2 px-4">
+        <div className="flex items-center justify-center py-2 px-4">
           <div className="relative w-40 h-12">
             <Image
               src="/Carlos + Andrea.png"
@@ -617,10 +710,12 @@ export default function Home() {
                         className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
                         onClick={() => openPhotoModal(globalIndex)}
                       >
+                        {/* GALERÍA USA THUMBNAIL */}
                         <img
                           src={url}
                           alt={`Foto de ${name}`}
                           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                          loading="lazy"
                         />
                         
                         {likes > 0 && (
@@ -692,12 +787,12 @@ export default function Home() {
               </svg>
             )}
 
-<div 
-  className="w-16 h-16 rounded-full flex items-center justify-center shadow-lg z-10 transition-colors duration-300"
-  style={{
-    backgroundColor: showSuccess ? '#10b981' : isUploading ? '#3b82f6' : '#6E0005'
-  }}
->
+            <div 
+              className="w-16 h-16 rounded-full flex items-center justify-center shadow-lg z-10 transition-colors duration-300"
+              style={{
+                backgroundColor: showSuccess ? '#10b981' : isUploading ? '#3b82f6' : '#6E0005'
+              }}
+            >
               {showSuccess ? (
                 <div className="w-12 h-12">
                   <Lottie 
