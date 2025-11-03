@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import Image from 'next/image';
 import Lottie from 'lottie-react';
@@ -143,19 +143,20 @@ interface PhotoData {
   guest_name: string | null;
 }
 
-async function loadPhotos(): Promise<PhotoData[]> {
+async function loadPhotos(limit: number = 30, offset: number = 0): Promise<PhotoData[]> {
   try {
     const { data, error } = await supabase
       .from('uploads')
       .select('photo_url, guest_name')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (error) {
       console.error('❌ Error cargando fotos:', error);
       return [];
     }
 
-    console.log('📷 Fotos cargadas:', data.length);
+    console.log(`📷 Fotos cargadas: ${data.length} (offset: ${offset})`);
     return data;
 
   } catch (error) {
@@ -167,6 +168,62 @@ async function loadPhotos(): Promise<PhotoData[]> {
 // Función helper para obtener versión web de una URL de thumbnail
 function getWebUrl(thumbUrl: string): string {
   return thumbUrl.replace('thumb_', 'web_');
+}
+
+// Componente Skeleton para galería
+function GallerySkeleton({ count = 8 }: { count?: number }) {
+  return (
+    <>
+      {Array.from({ length: count }).map((_, i) => (
+        <div
+          key={i}
+          className="aspect-square relative overflow-hidden rounded-lg bg-gray-200 animate-pulse"
+        />
+      ))}
+    </>
+  );
+}
+
+// Componente de imagen con loading state para modal
+function ImageWithLoader({ src, alt, onLoad }: { src: string; alt: string; onLoad?: () => void }) {
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+
+  return (
+    <div className="relative w-full max-w-4xl max-h-[70vh] flex items-center justify-center">
+      {/* Spinner mientras carga */}
+      {isLoading && !hasError && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      )}
+
+      {/* Mensaje de error */}
+      {hasError && (
+        <div className="text-white text-center">
+          <p className="text-xl mb-2">⚠️ Error al cargar la imagen</p>
+          <p className="text-sm text-gray-400">Intenta refrescar la página</p>
+        </div>
+      )}
+
+      {/* Imagen */}
+      <img
+        src={src}
+        alt={alt}
+        className={`max-w-full max-h-[70vh] object-contain rounded-lg transition-opacity duration-300 ${
+          isLoading ? 'opacity-0' : 'opacity-100'
+        }`}
+        onLoad={() => {
+          setIsLoading(false);
+          onLoad?.();
+        }}
+        onError={() => {
+          setIsLoading(false);
+          setHasError(true);
+        }}
+      />
+    </div>
+  );
 }
 
 export default function Home() {
@@ -186,6 +243,36 @@ export default function Home() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [shouldCancel, setShouldCancel] = useState(false);
 
+  // Estados para infinite scroll
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  // Preload de imágenes siguiente/anterior en modal
+  useEffect(() => {
+    if (selectedPhotoIndex === null) return;
+
+    const preloadUrls: string[] = [];
+    
+    // Precargar siguiente
+    if (selectedPhotoIndex < photos.length - 1) {
+      preloadUrls.push(getWebUrl(photos[selectedPhotoIndex + 1].photo_url));
+    }
+    
+    // Precargar anterior
+    if (selectedPhotoIndex > 0) {
+      preloadUrls.push(getWebUrl(photos[selectedPhotoIndex - 1].photo_url));
+    }
+
+    // Crear elementos Image para precargar
+    preloadUrls.forEach(url => {
+      const img = new window.Image();
+      img.src = url;
+    });
+  }, [selectedPhotoIndex, photos]);
+
   // Cargar todos los likes al inicio
   const loadAllLikes = async () => {
     try {
@@ -203,10 +290,8 @@ export default function Home() {
       const userLikesSet = new Set<string>();
 
       data.forEach(like => {
-        // Contar total de likes por foto
         likesCount[like.photo_url] = (likesCount[like.photo_url] || 0) + 1;
 
-        // Marcar fotos que el usuario actual ha likeado
         if (like.guest_name === guestName) {
           userLikesSet.add(like.photo_url);
         }
@@ -221,6 +306,48 @@ export default function Home() {
     }
   };
 
+  // Cargar más fotos (infinite scroll)
+  const loadMore = useCallback(async () => {
+    if (isLoadingMore || !hasMore) return;
+
+    setIsLoadingMore(true);
+    console.log('📷 Cargando más fotos...');
+
+    const newPhotos = await loadPhotos(20, photos.length);
+    
+    if (newPhotos.length === 0) {
+      setHasMore(false);
+      console.log('✅ No hay más fotos');
+    } else {
+      setPhotos(prev => [...prev, ...newPhotos]);
+      console.log(`✅ ${newPhotos.length} fotos más cargadas`);
+    }
+
+    setIsLoadingMore(false);
+  }, [photos.length, isLoadingMore, hasMore]);
+
+  // Setup Intersection Observer para infinite scroll
+  useEffect(() => {
+    if (!loadMoreRef.current) return;
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isLoadingMore && hasMore) {
+          loadMore();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observerRef.current.observe(loadMoreRef.current);
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [loadMore, isLoadingMore, hasMore]);
+
   useEffect(() => {
     const savedName = localStorage.getItem('guestName');
     if (savedName) {
@@ -229,11 +356,20 @@ export default function Home() {
     }
 
     async function fetchData() {
-      const photosData = await loadPhotos();
+      setIsInitialLoading(true);
+      
+      // Cargar primeras 30 fotos
+      const photosData = await loadPhotos(30, 0);
       setPhotos(photosData);
+      
+      if (photosData.length < 30) {
+        setHasMore(false);
+      }
       
       // Cargar likes después de cargar fotos
       await loadAllLikes();
+      
+      setIsInitialLoading(false);
     }
     
     fetchData();
@@ -274,7 +410,6 @@ export default function Home() {
     const failed: File[] = [];
     
     for (let i = 0; i < fileArray.length; i++) {
-      // Verificar si se canceló
       if (shouldCancel) {
         console.log('🚫 Subida cancelada por el usuario');
         setUploadError('Subida cancelada');
@@ -295,17 +430,14 @@ export default function Home() {
       }
     }
     
-    // Actualizar fotos subidas exitosamente
     if (newPhotos.length > 0) {
       setPhotos(prev => [...newPhotos, ...prev]);
     }
 
-    // Manejar errores
     if (failed.length > 0 && !shouldCancel) {
       setFailedFiles(failed);
       setUploadError(`${failed.length} archivo(s) fallaron al subir`);
     } else if (!shouldCancel && newPhotos.length > 0) {
-      // Solo mostrar success si no hubo errores y no se canceló
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 4000);
     }
@@ -346,7 +478,6 @@ export default function Home() {
     handleUpload(dt.files);
   };
 
-  // Funciones de likes
   const loadLikes = async (photoUrl: string) => {
     try {
       const { data, error } = await supabase
@@ -390,7 +521,6 @@ export default function Home() {
 
     try {
       if (hasLiked) {
-        // Quitar like
         const { error } = await supabase
           .from('likes')
           .delete()
@@ -410,7 +540,6 @@ export default function Home() {
           [photoUrl]: Math.max(0, (prev[photoUrl] || 0) - 1)
         }));
       } else {
-        // Dar like
         const { error } = await supabase
           .from('likes')
           .insert({ photo_url: photoUrl, guest_name: guestName });
@@ -432,7 +561,6 @@ export default function Home() {
   const openPhotoModal = async (index: number) => {
     setSelectedPhotoIndex(index);
     
-    // Cargar likes de esta foto
     const photoUrl = photos[index].photo_url;
     const likes = await loadLikes(photoUrl);
     const hasLiked = await checkUserLike(photoUrl);
@@ -600,7 +728,6 @@ export default function Home() {
             className="relative w-full h-full flex items-center justify-center p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Botón cerrar */}
             <button
               onClick={closePhotoModal}
               className="absolute top-4 right-4 text-white text-4xl hover:text-gray-300 z-10"
@@ -608,7 +735,6 @@ export default function Home() {
               ×
             </button>
 
-            {/* Flecha izquierda */}
             <button
               onClick={goToPrevPhoto}
               className="absolute left-4 text-white text-4xl hover:text-gray-300 z-10"
@@ -616,15 +742,12 @@ export default function Home() {
               ‹
             </button>
 
-            {/* Imagen - USA VERSIÓN WEB */}
             <div className="max-w-4xl max-h-full flex flex-col items-center">
-              <img
+              <ImageWithLoader 
                 src={getWebUrl(photos[selectedPhotoIndex].photo_url)}
                 alt="Foto"
-                className="max-w-full max-h-[70vh] object-contain rounded-lg"
               />
 
-              {/* Like button - SVG heart */}
               <button
                 onClick={() => toggleLike(photos[selectedPhotoIndex].photo_url)}
                 className="mt-6 flex items-center gap-3 text-white hover:scale-110 transition-transform"
@@ -658,7 +781,6 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Flecha derecha */}
             <button
               onClick={goToNextPhoto}
               className="absolute right-4 text-white text-4xl hover:text-gray-300 z-10"
@@ -687,57 +809,76 @@ export default function Home() {
       {/* Contenido principal */}
       <main className="min-h-screen pb-32" style={{ backgroundColor: '#F4EAE3' }}>
         <div className="max-w-6xl mx-auto px-4 py-8">
-          {Object.keys(photosByGuest).length === 0 ? (
+          {isInitialLoading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+              <GallerySkeleton count={12} />
+            </div>
+          ) : Object.keys(photosByGuest).length === 0 ? (
             <div className="text-center py-20">
               <p className="text-gray-400 text-lg">
                 Aún no hay fotos. ¡Sé el primero en subir! 📸
               </p>
             </div>
           ) : (
-            Object.entries(photosByGuest).map(([name, urls]) => (
-              <div key={name} className="mb-12">
-                <h2 className="text-xl font-semibold mb-4 text-gray-800">
-                  {name} subió {urls.length} {urls.length === 1 ? 'foto' : 'fotos'}
-                </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                  {urls.map((url, index) => {
-                    const globalIndex = photos.findIndex(p => p.photo_url === url);
-                    const likes = photoLikes[url] || 0;
-                    
-                    return (
-                      <div 
-                        key={index} 
-                        className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
-                        onClick={() => openPhotoModal(globalIndex)}
-                      >
-                        {/* GALERÍA USA THUMBNAIL */}
-                        <img
-                          src={url}
-                          alt={`Foto de ${name}`}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                          loading="lazy"
-                        />
-                        
-                        {likes > 0 && (
-                          <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded-full text-sm flex items-center gap-1">
-                            <svg 
-                              width="16" 
-                              height="16" 
-                              viewBox="0 0 24 24" 
-                              fill="#ef4444"
-                              xmlns="http://www.w3.org/2000/svg"
-                            >
-                              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                            </svg>
-                            <span>{likes}</span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+            <>
+              {Object.entries(photosByGuest).map(([name, urls]) => (
+                <div key={name} className="mb-12">
+                  <h2 className="text-xl font-semibold mb-4 text-gray-800">
+                    {name} subió {urls.length} {urls.length === 1 ? 'foto' : 'fotos'}
+                  </h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    {urls.map((url, index) => {
+                      const globalIndex = photos.findIndex(p => p.photo_url === url);
+                      const likes = photoLikes[url] || 0;
+                      
+                      return (
+                        <div 
+                          key={index} 
+                          className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
+                          onClick={() => openPhotoModal(globalIndex)}
+                        >
+                          <img
+                            src={url}
+                            alt={`Foto de ${name}`}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                            loading="lazy"
+                          />
+                          
+                          {likes > 0 && (
+                            <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded-full text-sm flex items-center gap-1">
+                              <svg 
+                                width="16" 
+                                height="16" 
+                                viewBox="0 0 24 24" 
+                                fill="#ef4444"
+                                xmlns="http://www.w3.org/2000/svg"
+                              >
+                                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                              </svg>
+                              <span>{likes}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
+              ))}
+
+              {/* Trigger para infinite scroll */}
+              <div ref={loadMoreRef} className="h-20 flex items-center justify-center">
+                {isLoadingMore && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 w-full">
+                    <GallerySkeleton count={8} />
+                  </div>
+                )}
+                {!hasMore && photos.length > 0 && (
+                  <p className="text-gray-400 text-sm">
+                    ¡Has visto todas las fotos! 🎉
+                  </p>
+                )}
               </div>
-            ))
+            </>
           )}
         </div>
       </main>
