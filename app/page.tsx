@@ -15,7 +15,7 @@ async function uploadFile(file: File, guestName: string | null): Promise<{ url: 
   try {
     const isVideo = file.type.startsWith('video/');
 
-    // VIDEOS → Cloudflare Stream
+    // VIDEOS → Cloudflare Stream (upload directo)
     if (isVideo) {
       console.log('📹 Subiendo vídeo a Cloudflare:', file.name, '-', (file.size / 1024 / 1024).toFixed(2), 'MB');
 
@@ -25,25 +25,39 @@ async function uploadFile(file: File, guestName: string | null): Promise<{ url: 
         return null;
       }
 
-      //Comentario de fuerza
-      // Subir a Cloudflare via API route
+      // 1. Obtener URL de upload directo
+      console.log('🔑 Obteniendo URL de upload...');
+      const urlResponse = await fetch('/api/get-upload-url', {
+        method: 'POST',
+      });
+
+      if (!urlResponse.ok) {
+        console.error('❌ Error obteniendo URL de upload');
+        return null;
+      }
+
+      const { uploadURL, uid: videoId } = await urlResponse.json();
+      console.log('✅ URL obtenida, videoId:', videoId);
+
+      // 2. Subir DIRECTO a Cloudflare (sin pasar por Vercel)
+      console.log('⬆️ Subiendo directo a Cloudflare...');
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('/api/upload-video', {
+      const uploadResponse = await fetch(uploadURL, {
         method: 'POST',
         body: formData,
       });
 
-      if (!response.ok) {
-        console.error('❌ Error subiendo a Cloudflare');
+      if (!uploadResponse.ok) {
+        console.error('❌ Error subiendo a Cloudflare:', uploadResponse.status);
         return null;
       }
 
-      const { videoId, thumbnailUrl } = await response.json();
       console.log('✅ Vídeo subido a Cloudflare:', videoId);
+      const thumbnailUrl = `https://customer-${CLOUDFLARE_ACCOUNT_ID}.cloudflarestream.com/${videoId}/thumbnails/thumbnail.jpg?time=1s`;
 
-      // Guardar en Supabase DB
+      // 3. Guardar en Supabase DB
       const { error: dbError } = await supabase
         .from('uploads')
         .insert({
