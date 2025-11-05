@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -10,7 +11,7 @@ import imageCompression from 'browser-image-compression';
 
 const CLOUDFLARE_ACCOUNT_ID = '1f11b95e5fdee95f2c55ed57a4508a99';
 
-async function uploadFile(file: File, guestName: string | null): Promise<{ url: string; mediaType: string; videoId?: string } | null> {
+async function uploadFile(file: File, guestName: string | null): Promise<{ url: string; mediaType: 'image' | 'video'; videoId?: string } | null> {
   try {
     const isVideo = file.type.startsWith('video/');
 
@@ -24,6 +25,7 @@ async function uploadFile(file: File, guestName: string | null): Promise<{ url: 
         return null;
       }
 
+      //Comentario de fuerza
       // Subir a Cloudflare via API route
       const formData = new FormData();
       formData.append('file', file);
@@ -199,7 +201,7 @@ function GallerySkeleton({ count = 8 }: { count?: number }) {
 }
 
 // Componente de imagen con loading state para modal
-function ImageWithLoader({ src, alt, onLoad }: { src: string; alt: string; onLoad?: () => void }) {
+function ImageWithLoader({ src, alt }: { src: string; alt: string }) {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
@@ -224,10 +226,7 @@ function ImageWithLoader({ src, alt, onLoad }: { src: string; alt: string; onLoa
         className={`max-w-full max-h-[70vh] object-contain rounded-lg transition-opacity duration-300 ${
           isLoading ? 'opacity-0' : 'opacity-100'
         }`}
-        onLoad={() => {
-          setIsLoading(false);
-          onLoad?.();
-        }}
+        onLoad={() => setIsLoading(false)}
         onError={() => {
           setIsLoading(false);
           setHasError(true);
@@ -241,12 +240,10 @@ function ImageWithLoader({ src, alt, onLoad }: { src: string; alt: string; onLoa
 function VideoThumbnail({ 
   videoId, 
   likes, 
-  hasLiked, 
   onClick 
 }: { 
   videoId: string;
   likes: number;
-  hasLiked: boolean;
   onClick: () => void;
 }) {
   const [isInViewport, setIsInViewport] = useState(false);
@@ -336,32 +333,7 @@ export default function Home() {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (selectedPhotoIndex === null) return;
-
-    const preloadUrls: string[] = [];
-    
-    if (selectedPhotoIndex < photos.length - 1) {
-      const nextPhoto = photos[selectedPhotoIndex + 1];
-      if (nextPhoto.media_type === 'image') {
-        preloadUrls.push(getWebUrl(nextPhoto.photo_url));
-      }
-    }
-    
-    if (selectedPhotoIndex > 0) {
-      const prevPhoto = photos[selectedPhotoIndex - 1];
-      if (prevPhoto.media_type === 'image') {
-        preloadUrls.push(getWebUrl(prevPhoto.photo_url));
-      }
-    }
-
-    preloadUrls.forEach(url => {
-      const img = new window.Image();
-      img.src = url;
-    });
-  }, [selectedPhotoIndex, photos]);
-
-  const loadAllLikes = async () => {
+  const loadAllLikes = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('likes')
@@ -390,7 +362,32 @@ export default function Home() {
     } catch (error) {
       console.error('❌ Error:', error);
     }
-  };
+  }, [guestName]);
+
+  useEffect(() => {
+    if (selectedPhotoIndex === null) return;
+
+    const preloadUrls: string[] = [];
+    
+    if (selectedPhotoIndex < photos.length - 1) {
+      const nextPhoto = photos[selectedPhotoIndex + 1];
+      if (nextPhoto.media_type === 'image') {
+        preloadUrls.push(getWebUrl(nextPhoto.photo_url));
+      }
+    }
+    
+    if (selectedPhotoIndex > 0) {
+      const prevPhoto = photos[selectedPhotoIndex - 1];
+      if (prevPhoto.media_type === 'image') {
+        preloadUrls.push(getWebUrl(prevPhoto.photo_url));
+      }
+    }
+
+    preloadUrls.forEach(url => {
+      const img = new window.Image();
+      img.src = url;
+    });
+  }, [selectedPhotoIndex, photos]);
 
   const loadMore = useCallback(async () => {
     if (isLoadingMore || !hasMore) return;
@@ -449,8 +446,6 @@ export default function Home() {
         setHasMore(false);
       }
       
-      await loadAllLikes();
-      
       setIsInitialLoading(false);
     }
     
@@ -461,7 +456,7 @@ export default function Home() {
     if (guestName && photos.length > 0) {
       loadAllLikes();
     }
-  }, [guestName]);
+  }, [guestName, photos.length, loadAllLikes]);
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -564,42 +559,6 @@ export default function Home() {
     handleUpload(dt.files);
   };
 
-  const loadLikes = async (photoUrl: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('likes')
-        .select('guest_name')
-        .eq('photo_url', photoUrl);
-
-      if (error) {
-        console.error('❌ Error cargando likes:', error);
-        return 0;
-      }
-
-      return data.length;
-    } catch (error) {
-      console.error('❌ Error:', error);
-      return 0;
-    }
-  };
-
-  const checkUserLike = async (photoUrl: string) => {
-    if (!guestName) return false;
-
-    try {
-      const { data, error } = await supabase
-        .from('likes')
-        .select('id')
-        .eq('photo_url', photoUrl)
-        .eq('guest_name', guestName)
-        .single();
-
-      return !!data;
-    } catch (error) {
-      return false;
-    }
-  };
-
   const toggleLike = async (photoUrl: string) => {
     if (!guestName) return;
 
@@ -644,17 +603,8 @@ export default function Home() {
     }
   };
 
-  const openPhotoModal = async (index: number) => {
+  const openPhotoModal = (index: number) => {
     setSelectedPhotoIndex(index);
-    
-    const photoUrl = photos[index].photo_url;
-    const likes = await loadLikes(photoUrl);
-    const hasLiked = await checkUserLike(photoUrl);
-
-    setPhotoLikes(prev => ({ ...prev, [photoUrl]: likes }));
-    if (hasLiked) {
-      setUserLikes(prev => new Set(prev).add(photoUrl));
-    }
   };
 
   const goToPrevPhoto = () => {
@@ -673,6 +623,7 @@ export default function Home() {
     setSelectedPhotoIndex(null);
   };
 
+  // Agrupar fotos por persona
   const photosByGuest = photos.reduce((acc, photo) => {
     const name = photo.guest_name || 'Anónimo';
     if (!acc[name]) {
@@ -829,11 +780,17 @@ export default function Home() {
 
             <div className="max-w-4xl max-h-full flex flex-col items-center">
               {photos[selectedPhotoIndex].media_type === 'video' ? (
-                <iframe
-                  src={`https://customer-${CLOUDFLARE_ACCOUNT_ID}.cloudflarestream.com/${photos[selectedPhotoIndex].cloudflare_video_id}/iframe?autoplay=true`}
-                  allow="autoplay; fullscreen"
-                  className="w-full h-[70vh] rounded-lg border-0"
-                />
+                photos[selectedPhotoIndex].cloudflare_video_id ? (
+                  <iframe
+                    src={`https://customer-${CLOUDFLARE_ACCOUNT_ID}.cloudflarestream.com/${photos[selectedPhotoIndex].cloudflare_video_id}/iframe?autoplay=true`}
+                    allow="autoplay; fullscreen"
+                    className="w-full h-[70vh] rounded-lg border-0"
+                  />
+                ) : (
+                  <div className="text-white text-center">
+                    <p className="text-xl">⚠️ Vídeo no disponible</p>
+                  </div>
+                )
               ) : (
                 <ImageWithLoader 
                   src={getWebUrl(photos[selectedPhotoIndex].photo_url)}
@@ -914,57 +871,70 @@ export default function Home() {
             </div>
           ) : (
             <>
-              {Object.entries(photosByGuest).map(([name, items]) => (
-                <div key={name} className="mb-12">
-                  <h2 className="text-xl font-semibold mb-4 text-gray-800">
-                    {name} subió {items.length} {items.length === 1 ? 'foto' : 'fotos'}
-                  </h2>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                    {items.map((item, index) => {
-                      const globalIndex = photos.findIndex(p => p.photo_url === item.photo_url);
-                      const likes = photoLikes[item.photo_url] || 0;
-                      
-                      return item.media_type === 'video' ? (
-                        <VideoThumbnail
-                          key={index}
-                          videoId={item.cloudflare_video_id!}
-                          likes={likes}
-                          hasLiked={userLikes.has(item.photo_url)}
-                          onClick={() => openPhotoModal(globalIndex)}
-                        />
-                      ) : (
-                        <div 
-                          key={index} 
-                          className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
-                          onClick={() => openPhotoModal(globalIndex)}
-                        >
-                          <img
-                            src={item.photo_url}
-                            alt={`Foto de ${name}`}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                            loading="lazy"
+              {Object.entries(photosByGuest).map(([name, items]) => {
+                const photoCount = items.filter(i => i.media_type === 'image').length;
+                const videoCount = items.filter(i => i.media_type === 'video').length;
+                
+                let subtitle = '';
+                if (photoCount > 0 && videoCount > 0) {
+                  subtitle = `${photoCount} ${photoCount === 1 ? 'foto' : 'fotos'} y ${videoCount} ${videoCount === 1 ? 'vídeo' : 'vídeos'}`;
+                } else if (photoCount > 0) {
+                  subtitle = `${photoCount} ${photoCount === 1 ? 'foto' : 'fotos'}`;
+                } else {
+                  subtitle = `${videoCount} ${videoCount === 1 ? 'vídeo' : 'vídeos'}`;
+                }
+
+                return (
+                  <div key={name} className="mb-12">
+                    <h2 className="text-xl font-semibold mb-4 text-gray-800">
+                      {name} subió {subtitle}
+                    </h2>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                      {items.map((item, index) => {
+                        const globalIndex = photos.findIndex(p => p.photo_url === item.photo_url);
+                        const likes = photoLikes[item.photo_url] || 0;
+                        
+                        return item.media_type === 'video' && item.cloudflare_video_id ? (
+                          <VideoThumbnail
+                            key={index}
+                            videoId={item.cloudflare_video_id}
+                            likes={likes}
+                            onClick={() => openPhotoModal(globalIndex)}
                           />
-                          
-                          {likes > 0 && (
-                            <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded-full text-sm flex items-center gap-1">
-                              <svg 
-                                width="16" 
-                                height="16" 
-                                viewBox="0 0 24 24" 
-                                fill="#ef4444"
-                                xmlns="http://www.w3.org/2000/svg"
-                              >
-                                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                              </svg>
-                              <span>{likes}</span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                        ) : item.media_type === 'image' ? (
+                          <div 
+                            key={index} 
+                            className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
+                            onClick={() => openPhotoModal(globalIndex)}
+                          >
+                            <img
+                              src={item.photo_url}
+                              alt={`Foto de ${name}`}
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                              loading="lazy"
+                            />
+                            
+                            {likes > 0 && (
+                              <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded-full text-sm flex items-center gap-1">
+                                <svg 
+                                  width="16" 
+                                  height="16" 
+                                  viewBox="0 0 24 24" 
+                                  fill="#ef4444"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                >
+                                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                                </svg>
+                                <span>{likes}</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : null;
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {/* Trigger para infinite scroll */}
               <div ref={loadMoreRef} className="h-20 flex items-center justify-center">
