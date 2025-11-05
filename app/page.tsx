@@ -8,33 +8,47 @@ import uploadArrowAnimation from '@/public/animations/upload-arrow.json';
 import checkSuccessAnimation from '@/public/animations/check-success.json';
 import imageCompression from 'browser-image-compression';
 
-async function uploadFile(file: File, guestName: string | null): Promise<string | null> {
+const CLOUDFLARE_ACCOUNT_ID = '1f11b95e5fdee95f2c55ed57a4508a99';
+
+async function uploadFile(file: File, guestName: string | null): Promise<{ url: string; mediaType: string; videoId?: string } | null> {
   try {
-    // Si no es imagen, subir tal cual
-    if (!file.type.startsWith('image/')) {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      
-      console.log('⬆️ Subiendo archivo:', fileName);
+    const isVideo = file.type.startsWith('video/');
 
-      const { data, error } = await supabase.storage
-        .from('wedding-photos')
-        .upload(fileName, file);
+    // VIDEOS → Cloudflare Stream
+    if (isVideo) {
+      console.log('📹 Subiendo vídeo a Cloudflare:', file.name, '-', (file.size / 1024 / 1024).toFixed(2), 'MB');
 
-      if (error) {
-        console.error('❌ Error subiendo:', error);
+      // Validar tamaño (200MB)
+      if (file.size > 200 * 1024 * 1024) {
+        alert('Vídeo muy grande. Máximo 200MB.');
         return null;
       }
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('wedding-photos')
-        .getPublicUrl(fileName);
+      // Subir a Cloudflare via API route
+      const formData = new FormData();
+      formData.append('file', file);
 
+      const response = await fetch('/api/upload-video', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        console.error('❌ Error subiendo a Cloudflare');
+        return null;
+      }
+
+      const { videoId, thumbnailUrl } = await response.json();
+      console.log('✅ Vídeo subido a Cloudflare:', videoId);
+
+      // Guardar en Supabase DB
       const { error: dbError } = await supabase
         .from('uploads')
         .insert({
-          photo_url: publicUrl,
-          guest_name: guestName
+          photo_url: thumbnailUrl,
+          guest_name: guestName,
+          media_type: 'video',
+          cloudflare_video_id: videoId,
         });
 
       if (dbError) {
@@ -42,17 +56,17 @@ async function uploadFile(file: File, guestName: string | null): Promise<string 
         return null;
       }
 
-      return publicUrl;
+      return { url: thumbnailUrl, mediaType: 'video', videoId };
     }
 
-    // PARA IMÁGENES: Generar 3 versiones
+    // IMÁGENES → Supabase (como antes)
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substring(7);
     const baseFileName = `${timestamp}-${randomId}`;
 
     console.log('📦 Procesando imagen:', file.name, '-', (file.size / 1024 / 1024).toFixed(2), 'MB');
 
-    // 1. SUBIR ORIGINAL (sin comprimir)
+    // 1. SUBIR ORIGINAL
     const originalFileName = `original_${baseFileName}.jpg`;
     console.log('⬆️ Subiendo ORIGINAL...');
     
@@ -65,7 +79,7 @@ async function uploadFile(file: File, guestName: string | null): Promise<string 
       return null;
     }
 
-    // 2. GENERAR Y SUBIR VERSIÓN WEB (para modal)
+    // 2. VERSIÓN WEB
     console.log('🔄 Generando versión WEB...');
     const webOptions = {
       maxSizeMB: 0.5,
@@ -87,7 +101,7 @@ async function uploadFile(file: File, guestName: string | null): Promise<string 
       return null;
     }
 
-    // 3. GENERAR Y SUBIR THUMBNAIL (para galería)
+    // 3. THUMBNAIL
     console.log('🔄 Generando THUMBNAIL...');
     const thumbOptions = {
       maxSizeMB: 0.05,
@@ -109,19 +123,18 @@ async function uploadFile(file: File, guestName: string | null): Promise<string 
       return null;
     }
 
-    // Obtener URL pública del THUMBNAIL (es la que se guarda en la DB)
     const { data: { publicUrl } } = supabase.storage
       .from('wedding-photos')
       .getPublicUrl(thumbFileName);
 
     console.log('✅ 3 versiones subidas correctamente');
 
-    // Guardar en base de datos (con URL del thumbnail)
     const { error: dbError } = await supabase
       .from('uploads')
       .insert({
         photo_url: publicUrl,
-        guest_name: guestName
+        guest_name: guestName,
+        media_type: 'image',
       });
 
     if (dbError) {
@@ -129,8 +142,7 @@ async function uploadFile(file: File, guestName: string | null): Promise<string 
       return null;
     }
 
-    console.log('✅ Guardado en DB');
-    return publicUrl;
+    return { url: publicUrl, mediaType: 'image' };
 
   } catch (error) {
     console.error('❌ Error:', error);
@@ -141,13 +153,15 @@ async function uploadFile(file: File, guestName: string | null): Promise<string 
 interface PhotoData {
   photo_url: string;
   guest_name: string | null;
+  media_type: 'image' | 'video';
+  cloudflare_video_id?: string;
 }
 
 async function loadPhotos(limit: number = 30, offset: number = 0): Promise<PhotoData[]> {
   try {
     const { data, error } = await supabase
       .from('uploads')
-      .select('photo_url, guest_name')
+      .select('photo_url, guest_name, media_type, cloudflare_video_id')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -191,14 +205,12 @@ function ImageWithLoader({ src, alt, onLoad }: { src: string; alt: string; onLoa
 
   return (
     <div className="relative w-full max-w-4xl max-h-[70vh] flex items-center justify-center">
-      {/* Spinner mientras carga */}
       {isLoading && !hasError && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
         </div>
       )}
 
-      {/* Mensaje de error */}
       {hasError && (
         <div className="text-white text-center">
           <p className="text-xl mb-2">⚠️ Error al cargar la imagen</p>
@@ -206,7 +218,6 @@ function ImageWithLoader({ src, alt, onLoad }: { src: string; alt: string; onLoa
         </div>
       )}
 
-      {/* Imagen */}
       <img
         src={src}
         alt={alt}
@@ -226,6 +237,83 @@ function ImageWithLoader({ src, alt, onLoad }: { src: string; alt: string; onLoa
   );
 }
 
+// Componente VideoThumbnail con lazy loading
+function VideoThumbnail({ 
+  videoId, 
+  likes, 
+  hasLiked, 
+  onClick 
+}: { 
+  videoId: string;
+  likes: number;
+  hasLiked: boolean;
+  onClick: () => void;
+}) {
+  const [isInViewport, setIsInViewport] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          setIsInViewport(entry.isIntersecting);
+        });
+      },
+      { threshold: 0.5 }
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div 
+      ref={containerRef}
+      className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
+      onClick={onClick}
+    >
+      {isInViewport ? (
+        <iframe
+          src={`https://customer-${CLOUDFLARE_ACCOUNT_ID}.cloudflarestream.com/${videoId}/iframe?preload=metadata&autoplay=true&muted=true&loop=true&controls=false&startTime=0&endTime=15`}
+          allow="autoplay"
+          className="w-full h-full border-0 pointer-events-none"
+        />
+      ) : (
+        <img 
+          src={`https://customer-${CLOUDFLARE_ACCOUNT_ID}.cloudflarestream.com/${videoId}/thumbnails/thumbnail.jpg?time=1s&width=400`}
+          alt="Video thumbnail"
+          className="w-full h-full object-cover"
+          loading="lazy"
+        />
+      )}
+      
+      {/* Icono play */}
+      <div className="absolute bottom-2 left-2 bg-black bg-opacity-60 rounded-full p-2">
+        <span className="text-white text-xl">▶️</span>
+      </div>
+      
+      {/* Likes */}
+      {likes > 0 && (
+        <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded-full text-sm flex items-center gap-1">
+          <svg 
+            width="16" 
+            height="16" 
+            viewBox="0 0 24 24" 
+            fill="#ef4444"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+          </svg>
+          <span>{likes}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
   const [photos, setPhotos] = useState<PhotoData[]>([]);
   const [guestName, setGuestName] = useState<string | null>(null);  
@@ -237,43 +325,42 @@ export default function Home() {
   const [photoLikes, setPhotoLikes] = useState<Record<string, number>>({});
   const [userLikes, setUserLikes] = useState<Set<string>>(new Set());
   
-  // Estados para error handling
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [failedFiles, setFailedFiles] = useState<File[]>([]);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [shouldCancel, setShouldCancel] = useState(false);
 
-  // Estados para infinite scroll
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  // Preload de imágenes siguiente/anterior en modal
   useEffect(() => {
     if (selectedPhotoIndex === null) return;
 
     const preloadUrls: string[] = [];
     
-    // Precargar siguiente
     if (selectedPhotoIndex < photos.length - 1) {
-      preloadUrls.push(getWebUrl(photos[selectedPhotoIndex + 1].photo_url));
+      const nextPhoto = photos[selectedPhotoIndex + 1];
+      if (nextPhoto.media_type === 'image') {
+        preloadUrls.push(getWebUrl(nextPhoto.photo_url));
+      }
     }
     
-    // Precargar anterior
     if (selectedPhotoIndex > 0) {
-      preloadUrls.push(getWebUrl(photos[selectedPhotoIndex - 1].photo_url));
+      const prevPhoto = photos[selectedPhotoIndex - 1];
+      if (prevPhoto.media_type === 'image') {
+        preloadUrls.push(getWebUrl(prevPhoto.photo_url));
+      }
     }
 
-    // Crear elementos Image para precargar
     preloadUrls.forEach(url => {
       const img = new window.Image();
       img.src = url;
     });
   }, [selectedPhotoIndex, photos]);
 
-  // Cargar todos los likes al inicio
   const loadAllLikes = async () => {
     try {
       const { data, error } = await supabase
@@ -285,7 +372,6 @@ export default function Home() {
         return;
       }
 
-      // Contar likes por foto
       const likesCount: Record<string, number> = {};
       const userLikesSet = new Set<string>();
 
@@ -306,7 +392,6 @@ export default function Home() {
     }
   };
 
-  // Cargar más fotos (infinite scroll)
   const loadMore = useCallback(async () => {
     if (isLoadingMore || !hasMore) return;
 
@@ -326,7 +411,6 @@ export default function Home() {
     setIsLoadingMore(false);
   }, [photos.length, isLoadingMore, hasMore]);
 
-  // Setup Intersection Observer para infinite scroll
   useEffect(() => {
     if (!loadMoreRef.current) return;
 
@@ -358,7 +442,6 @@ export default function Home() {
     async function fetchData() {
       setIsInitialLoading(true);
       
-      // Cargar primeras 30 fotos
       const photosData = await loadPhotos(30, 0);
       setPhotos(photosData);
       
@@ -366,7 +449,6 @@ export default function Home() {
         setHasMore(false);
       }
       
-      // Cargar likes después de cargar fotos
       await loadAllLikes();
       
       setIsInitialLoading(false);
@@ -375,7 +457,6 @@ export default function Home() {
     fetchData();
   }, []);
 
-  // Recargar likes cuando cambie el nombre del usuario
   useEffect(() => {
     if (guestName && photos.length > 0) {
       loadAllLikes();
@@ -420,10 +501,15 @@ export default function Home() {
       
       setUploadProgress({ current: i + 1, total: fileArray.length });
       
-      const url = await uploadFile(file, guestName);
-      if (url) {
-        console.log('✅ Foto subida:', url);
-        newPhotos.push({ photo_url: url, guest_name: guestName });
+      const result = await uploadFile(file, guestName);
+      if (result) {
+        console.log('✅ Archivo subido:', result.url);
+        newPhotos.push({ 
+          photo_url: result.url, 
+          guest_name: guestName,
+          media_type: result.mediaType,
+          cloudflare_video_id: result.videoId
+        });
       } else {
         console.error('❌ Falló:', file.name);
         failed.push(file);
@@ -587,15 +673,14 @@ export default function Home() {
     setSelectedPhotoIndex(null);
   };
 
-  // Agrupar fotos por persona
   const photosByGuest = photos.reduce((acc, photo) => {
     const name = photo.guest_name || 'Anónimo';
     if (!acc[name]) {
       acc[name] = [];
     }
-    acc[name].push(photo.photo_url);
+    acc[name].push(photo);
     return acc;
-  }, {} as Record<string, string[]>);
+  }, {} as Record<string, PhotoData[]>);
 
   return (
     <>
@@ -718,7 +803,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Modal fullscreen de foto */}
+      {/* Modal fullscreen de foto/video */}
       {selectedPhotoIndex !== null && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center"
@@ -743,10 +828,18 @@ export default function Home() {
             </button>
 
             <div className="max-w-4xl max-h-full flex flex-col items-center">
-              <ImageWithLoader 
-                src={getWebUrl(photos[selectedPhotoIndex].photo_url)}
-                alt="Foto"
-              />
+              {photos[selectedPhotoIndex].media_type === 'video' ? (
+                <iframe
+                  src={`https://customer-${CLOUDFLARE_ACCOUNT_ID}.cloudflarestream.com/${photos[selectedPhotoIndex].cloudflare_video_id}/iframe?autoplay=true`}
+                  allow="autoplay; fullscreen"
+                  className="w-full h-[70vh] rounded-lg border-0"
+                />
+              ) : (
+                <ImageWithLoader 
+                  src={getWebUrl(photos[selectedPhotoIndex].photo_url)}
+                  alt="Foto"
+                />
+              )}
 
               <button
                 onClick={() => toggleLike(photos[selectedPhotoIndex].photo_url)}
@@ -821,24 +914,32 @@ export default function Home() {
             </div>
           ) : (
             <>
-              {Object.entries(photosByGuest).map(([name, urls]) => (
+              {Object.entries(photosByGuest).map(([name, items]) => (
                 <div key={name} className="mb-12">
                   <h2 className="text-xl font-semibold mb-4 text-gray-800">
-                    {name} subió {urls.length} {urls.length === 1 ? 'foto' : 'fotos'}
+                    {name} subió {items.length} {items.length === 1 ? 'foto' : 'fotos'}
                   </h2>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                    {urls.map((url, index) => {
-                      const globalIndex = photos.findIndex(p => p.photo_url === url);
-                      const likes = photoLikes[url] || 0;
+                    {items.map((item, index) => {
+                      const globalIndex = photos.findIndex(p => p.photo_url === item.photo_url);
+                      const likes = photoLikes[item.photo_url] || 0;
                       
-                      return (
+                      return item.media_type === 'video' ? (
+                        <VideoThumbnail
+                          key={index}
+                          videoId={item.cloudflare_video_id!}
+                          likes={likes}
+                          hasLiked={userLikes.has(item.photo_url)}
+                          onClick={() => openPhotoModal(globalIndex)}
+                        />
+                      ) : (
                         <div 
                           key={index} 
                           className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
                           onClick={() => openPhotoModal(globalIndex)}
                         >
                           <img
-                            src={url}
+                            src={item.photo_url}
                             alt={`Foto de ${name}`}
                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                             loading="lazy"
