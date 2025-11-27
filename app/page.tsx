@@ -418,7 +418,7 @@ function VideoInGallery({
           loop={false}
           muted
           playsInline
-          preload="metadata"
+          preload="none"
           className="w-full h-full object-cover"
           onTimeUpdate={(e) => {
             const video = e.target as HTMLVideoElement;
@@ -951,13 +951,14 @@ export default function Home() {
               ‹
             </button>
 
-            <div className="max-w-4xl max-h-full flex flex-col items-center">
+            <div className="max-w-4xl max-h-full flex flex-col items-center gap-6">
               {photos[selectedPhotoIndex].media_type === 'video' && photos[selectedPhotoIndex].video_url ? (
                 <video
                   src={photos[selectedPhotoIndex].video_url}
                   controls
                   autoPlay
-                  className="max-w-full max-h-[70vh] rounded-lg"
+                  playsInline
+                  className="max-w-full max-h-[60vh] rounded-lg"
                 />
               ) : (
                 <ImageWithLoader 
@@ -968,7 +969,7 @@ export default function Home() {
 
               <button
                 onClick={() => toggleLike(photos[selectedPhotoIndex].photo_url)}
-                className="mt-6 flex items-center gap-3 text-white hover:scale-110 transition-transform"
+                className="flex items-center gap-3 text-white hover:scale-110 transition-transform"
               >
                 {userLikes.has(photos[selectedPhotoIndex].photo_url) ? (
                   <svg 
