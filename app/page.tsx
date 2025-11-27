@@ -13,63 +13,34 @@ import imageCompression from 'browser-image-compression';
 // FUNCIONES AUXILIARES
 // ============================================
 
-// Extraer primer frame del video como thumbnail
-async function extractVideoFrame(file: File): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const video = document.createElement('video');
-    video.preload = 'metadata';
-    video.muted = true;
-    video.playsInline = true;
-    video.src = URL.createObjectURL(file);
-    
-    const timeout = setTimeout(() => {
-      URL.revokeObjectURL(video.src);
-      reject(new Error('Timeout extracting video frame'));
-    }, 30000); // 30 segundos de timeout (móviles más lentos)
-    
-    video.onloadeddata = () => {
-      // Ir al segundo 1 o mitad del video si es muy corto
-      video.currentTime = Math.min(1, video.duration / 2);
-    };
-    
-    video.onseeked = () => {
-      clearTimeout(timeout);
-      
-      const canvas = document.createElement('canvas');
-      canvas.width = 400;
-      canvas.height = 400;
-      const ctx = canvas.getContext('2d');
-      
-      if (ctx) {
-        // Centrar y crop para aspect ratio 1:1
-        const scale = Math.max(400 / video.videoWidth, 400 / video.videoHeight);
-        const w = video.videoWidth * scale;
-        const h = video.videoHeight * scale;
-        const x = (400 - w) / 2;
-        const y = (400 - h) / 2;
-        
-        ctx.drawImage(video, x, y, w, h);
-        
-        canvas.toBlob((blob) => {
-          URL.revokeObjectURL(video.src);
-          if (blob) {
-            resolve(blob);
-          } else {
-            reject(new Error('No se pudo crear blob del thumbnail'));
-          }
-        }, 'image/jpeg', 0.8);
-      } else {
-        URL.revokeObjectURL(video.src);
-        reject(new Error('No se pudo crear canvas'));
-      }
-    };
-    
-    video.onerror = () => {
-      clearTimeout(timeout);
-      URL.revokeObjectURL(video.src);
-      reject(new Error('Error cargando video'));
-    };
-  });
+// Crear placeholder para videos (gris + icono play)
+function createPlaceholder(): Blob {
+  const canvas = document.createElement('canvas');
+  canvas.width = 400;
+  canvas.height = 400;
+  const ctx = canvas.getContext('2d')!;
+  
+  // Fondo gris oscuro
+  ctx.fillStyle = '#1f2937';
+  ctx.fillRect(0, 0, 400, 400);
+  
+  // Icono play blanco
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 100px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('▶', 200, 200);
+  
+  // Convertir a Blob sincrónicamente usando dataURL
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+  const byteString = atob(dataUrl.split(',')[1]);
+  const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i);
+  }
+  return new Blob([ab], { type: mimeString });
 }
 
 // Obtener duración del video
@@ -131,38 +102,9 @@ async function uploadFile(
         console.warn('⚠️ No se pudo obtener duración:', error);
       }
 
-      // 3. EXTRAER THUMBNAIL
-      console.log('🎬 Extrayendo thumbnail...');
-      let thumbnailBlob: Blob;
-      try {
-        thumbnailBlob = await extractVideoFrame(file);
-        console.log('✅ Thumbnail extraído');
-      } catch (error) {
-        console.warn('⚠️ No se pudo extraer thumbnail, usando placeholder');
-        
-        // Crear thumbnail placeholder (cuadrado gris con icono play)
-        const canvas = document.createElement('canvas');
-        canvas.width = 400;
-        canvas.height = 400;
-        const ctx = canvas.getContext('2d');
-        
-        if (ctx) {
-          // Fondo gris oscuro
-          ctx.fillStyle = '#1f2937';
-          ctx.fillRect(0, 0, 400, 400);
-          
-          // Icono play blanco
-          ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 100px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText('▶', 200, 200);
-        }
-        
-        thumbnailBlob = await new Promise((resolve) => 
-          canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.8)
-        );
-      }
+      // 3. CREAR PLACEHOLDER
+      console.log('🎬 Creando placeholder...');
+      const thumbnailBlob = createPlaceholder();
 
       // 4. SUBIR THUMBNAIL
       const timestamp = Date.now();
