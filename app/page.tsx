@@ -97,8 +97,7 @@ async function getVideoDuration(file: File): Promise<number> {
 async function uploadFile(
   file: File, 
   guestName: string | null,
-  onError: (msg: string) => void,
-  onProgress?: (bytesUploaded: number) => void
+  onError: (msg: string) => void
 ): Promise<{ url: string; mediaType: 'image' | 'video'; videoUrl?: string; duration?: number } | null> {
   try {
     const isVideo = file.type.startsWith('video/');
@@ -173,13 +172,7 @@ async function uploadFile(
       console.log('⬆️ Subiendo thumbnail...');
       const { error: thumbError } = await supabase.storage
         .from('wedding-photos')
-        .upload(thumbFileName, thumbnailBlob, {
-          onUploadProgress: (progress) => {
-            if (onProgress && progress.total) {
-              onProgress(progress.loaded);
-            }
-          }
-        });
+        .upload(thumbFileName, thumbnailBlob);
 
       if (thumbError) {
         console.error('❌ Error subiendo thumbnail:', thumbError);
@@ -195,17 +188,9 @@ async function uploadFile(
       const videoFileName = `video_${timestamp}-${randomId}.${file.name.split('.').pop()}`;
       
       console.log('⬆️ Subiendo video...');
-      const thumbnailSize = thumbnailBlob.size;
       const { error: videoError } = await supabase.storage
         .from('wedding-videos')
-        .upload(videoFileName, file, {
-          onUploadProgress: (progress) => {
-            if (onProgress && progress.total) {
-              // Añadir tamaño del thumbnail ya subido
-              onProgress(thumbnailSize + progress.loaded);
-            }
-          }
-        });
+        .upload(videoFileName, file);
 
       if (videoError) {
         console.error('❌ Error subiendo video:', videoError);
@@ -258,13 +243,7 @@ async function uploadFile(
     
     const { error: originalError } = await supabase.storage
       .from('wedding-photos')
-      .upload(originalFileName, file, {
-        onUploadProgress: (progress) => {
-          if (onProgress && progress.total) {
-            onProgress(progress.loaded);
-          }
-        }
-      });
+      .upload(originalFileName, file);
 
     if (originalError) {
       console.error('❌ Error subiendo original:', originalError);
@@ -284,16 +263,9 @@ async function uploadFile(
     const webFileName = `web_${baseFileName}.jpg`;
     console.log('⬆️ Subiendo WEB:', (webFile.size / 1024).toFixed(0), 'KB');
 
-    const originalSize = file.size;
     const { error: webError } = await supabase.storage
       .from('wedding-photos')
-      .upload(webFileName, webFile, {
-        onUploadProgress: (progress) => {
-          if (onProgress && progress.total) {
-            onProgress(originalSize + progress.loaded);
-          }
-        }
-      });
+      .upload(webFileName, webFile);
 
     if (webError) {
       console.error('❌ Error subiendo web:', webError);
@@ -313,16 +285,9 @@ async function uploadFile(
     const thumbFileName = `thumb_${baseFileName}.jpg`;
     console.log('⬆️ Subiendo THUMBNAIL:', (thumbFile.size / 1024).toFixed(0), 'KB');
 
-    const webSize = webFile.size;
     const { error: thumbError } = await supabase.storage
       .from('wedding-photos')
-      .upload(thumbFileName, thumbFile, {
-        onUploadProgress: (progress) => {
-          if (onProgress && progress.total) {
-            onProgress(originalSize + webSize + progress.loaded);
-          }
-        }
-      });
+      .upload(thumbFileName, thumbFile);
 
     if (thumbError) {
       console.error('❌ Error subiendo thumbnail:', thumbError);
@@ -739,13 +704,7 @@ export default function Home() {
 
       const file = fileArray[i];
       
-      const result = await uploadFile(file, guestName, setUploadError, (bytesUploaded) => {
-        // Callback de progreso: bytes del archivo actual
-        setUploadProgress({ 
-          uploadedBytes: uploadedSoFar + bytesUploaded, 
-          totalBytes 
-        });
-      });
+      const result = await uploadFile(file, guestName, setUploadError);
       
       if (result) {
         console.log('✅ Archivo subido:', result.url);
@@ -757,7 +716,7 @@ export default function Home() {
           duration: result.duration
         });
         
-        // Archivo completado, actualizar acumulador
+        // Archivo completado, actualizar progreso
         uploadedSoFar += file.size;
         setUploadProgress({ uploadedBytes: uploadedSoFar, totalBytes });
       } else {
