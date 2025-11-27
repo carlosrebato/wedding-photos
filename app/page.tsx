@@ -97,7 +97,8 @@ async function getVideoDuration(file: File): Promise<number> {
 async function uploadFile(
   file: File, 
   guestName: string | null,
-  onError: (msg: string) => void
+  onError: (msg: string) => void,
+  onProgress?: (bytesUploaded: number) => void
 ): Promise<{ url: string; mediaType: 'image' | 'video'; videoUrl?: string; duration?: number } | null> {
   try {
     const isVideo = file.type.startsWith('video/');
@@ -172,7 +173,13 @@ async function uploadFile(
       console.log('⬆️ Subiendo thumbnail...');
       const { error: thumbError } = await supabase.storage
         .from('wedding-photos')
-        .upload(thumbFileName, thumbnailBlob);
+        .upload(thumbFileName, thumbnailBlob, {
+          onUploadProgress: (progress) => {
+            if (onProgress && progress.total) {
+              onProgress(progress.loaded);
+            }
+          }
+        });
 
       if (thumbError) {
         console.error('❌ Error subiendo thumbnail:', thumbError);
@@ -188,9 +195,17 @@ async function uploadFile(
       const videoFileName = `video_${timestamp}-${randomId}.${file.name.split('.').pop()}`;
       
       console.log('⬆️ Subiendo video...');
+      const thumbnailSize = thumbnailBlob.size;
       const { error: videoError } = await supabase.storage
         .from('wedding-videos')
-        .upload(videoFileName, file);
+        .upload(videoFileName, file, {
+          onUploadProgress: (progress) => {
+            if (onProgress && progress.total) {
+              // Añadir tamaño del thumbnail ya subido
+              onProgress(thumbnailSize + progress.loaded);
+            }
+          }
+        });
 
       if (videoError) {
         console.error('❌ Error subiendo video:', videoError);
@@ -243,7 +258,13 @@ async function uploadFile(
     
     const { error: originalError } = await supabase.storage
       .from('wedding-photos')
-      .upload(originalFileName, file);
+      .upload(originalFileName, file, {
+        onUploadProgress: (progress) => {
+          if (onProgress && progress.total) {
+            onProgress(progress.loaded);
+          }
+        }
+      });
 
     if (originalError) {
       console.error('❌ Error subiendo original:', originalError);
@@ -263,9 +284,16 @@ async function uploadFile(
     const webFileName = `web_${baseFileName}.jpg`;
     console.log('⬆️ Subiendo WEB:', (webFile.size / 1024).toFixed(0), 'KB');
 
+    const originalSize = file.size;
     const { error: webError } = await supabase.storage
       .from('wedding-photos')
-      .upload(webFileName, webFile);
+      .upload(webFileName, webFile, {
+        onUploadProgress: (progress) => {
+          if (onProgress && progress.total) {
+            onProgress(originalSize + progress.loaded);
+          }
+        }
+      });
 
     if (webError) {
       console.error('❌ Error subiendo web:', webError);
@@ -285,9 +313,16 @@ async function uploadFile(
     const thumbFileName = `thumb_${baseFileName}.jpg`;
     console.log('⬆️ Subiendo THUMBNAIL:', (thumbFile.size / 1024).toFixed(0), 'KB');
 
+    const webSize = webFile.size;
     const { error: thumbError } = await supabase.storage
       .from('wedding-photos')
-      .upload(thumbFileName, thumbFile);
+      .upload(thumbFileName, thumbFile, {
+        onUploadProgress: (progress) => {
+          if (onProgress && progress.total) {
+            onProgress(originalSize + webSize + progress.loaded);
+          }
+        }
+      });
 
     if (thumbError) {
       console.error('❌ Error subiendo thumbnail:', thumbError);
@@ -521,7 +556,7 @@ export default function Home() {
   const [guestName, setGuestName] = useState<string | null>(null);  
   const [showModal, setShowModal] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
+  const [uploadProgress, setUploadProgress] = useState({ uploadedBytes: 0, totalBytes: 0 });
   const [showSuccess, setShowSuccess] = useState(false);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
   const [photoLikes, setPhotoLikes] = useState<Record<string, number>>({});
@@ -680,15 +715,20 @@ export default function Home() {
     const fileArray = Array.from(files);
     console.log('📸 Archivos seleccionados:', fileArray);
 
+    // Calcular peso total en bytes
+    const totalBytes = fileArray.reduce((sum, file) => sum + file.size, 0);
+    console.log('📦 Peso total:', (totalBytes / 1024 / 1024).toFixed(2), 'MB');
+
     setIsUploading(true);
     setShouldCancel(false);
     setUploadError(null);
     setFailedFiles([]);
-    setUploadProgress({ current: 0, total: fileArray.length });
+    setUploadProgress({ uploadedBytes: 0, totalBytes });
 
     console.log('⬆️ Iniciando subida...');
     const newPhotos: PhotoData[] = [];
     const failed: File[] = [];
+    let uploadedSoFar = 0; // Acumulador de bytes completados
     
     for (let i = 0; i < fileArray.length; i++) {
       if (shouldCancel) {
@@ -699,9 +739,14 @@ export default function Home() {
 
       const file = fileArray[i];
       
-      setUploadProgress({ current: i + 1, total: fileArray.length });
+      const result = await uploadFile(file, guestName, setUploadError, (bytesUploaded) => {
+        // Callback de progreso: bytes del archivo actual
+        setUploadProgress({ 
+          uploadedBytes: uploadedSoFar + bytesUploaded, 
+          totalBytes 
+        });
+      });
       
-      const result = await uploadFile(file, guestName, setUploadError);
       if (result) {
         console.log('✅ Archivo subido:', result.url);
         newPhotos.push({ 
@@ -711,6 +756,10 @@ export default function Home() {
           media_type: result.mediaType,
           duration: result.duration
         });
+        
+        // Archivo completado, actualizar acumulador
+        uploadedSoFar += file.size;
+        setUploadProgress({ uploadedBytes: uploadedSoFar, totalBytes });
       } else {
         console.error('❌ Falló:', file.name);
         failed.push(file);
@@ -1194,10 +1243,10 @@ export default function Home() {
                   strokeWidth="6"
                   fill="none"
                   strokeDasharray={`${2 * Math.PI * 36}`}
-                  strokeDashoffset={`${2 * Math.PI * 36 * (1 - uploadProgress.current / uploadProgress.total)}`}
+                  strokeDashoffset={`${2 * Math.PI * 36 * (1 - (uploadProgress.totalBytes > 0 ? uploadProgress.uploadedBytes / uploadProgress.totalBytes : 0))}`}
                   strokeLinecap="round"
                   transform="rotate(-90 40 40)"
-                  className="transition-all duration-500"
+                  className="transition-all duration-300"
                 />
               </svg>
             )}
