@@ -712,6 +712,8 @@ export default function Home() {
       if (files && files.length > 0) {
         handleUpload(files);
       }
+      // Resetear el input para permitir seleccionar el mismo archivo de nuevo
+      input.value = '';
     };
     input.click();
   };
