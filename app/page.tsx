@@ -25,7 +25,7 @@ async function extractVideoFrame(file: File): Promise<Blob> {
     const timeout = setTimeout(() => {
       URL.revokeObjectURL(video.src);
       reject(new Error('Timeout extracting video frame'));
-    }, 10000); // 10 segundos de timeout
+    }, 30000); // 30 segundos de timeout (móviles más lentos)
     
     video.onloadeddata = () => {
       // Ir al segundo 1 o mitad del video si es muy corto
@@ -138,9 +138,30 @@ async function uploadFile(
         thumbnailBlob = await extractVideoFrame(file);
         console.log('✅ Thumbnail extraído');
       } catch (error) {
-        console.error('❌ Error extrayendo thumbnail:', error);
-        onError('Error procesando video. Intenta con otro.');
-        return null;
+        console.warn('⚠️ No se pudo extraer thumbnail, usando placeholder');
+        
+        // Crear thumbnail placeholder (cuadrado gris con icono play)
+        const canvas = document.createElement('canvas');
+        canvas.width = 400;
+        canvas.height = 400;
+        const ctx = canvas.getContext('2d');
+        
+        if (ctx) {
+          // Fondo gris oscuro
+          ctx.fillStyle = '#1f2937';
+          ctx.fillRect(0, 0, 400, 400);
+          
+          // Icono play blanco
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 100px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('▶', 200, 200);
+        }
+        
+        thumbnailBlob = await new Promise((resolve) => 
+          canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.8)
+        );
       }
 
       // 4. SUBIR THUMBNAIL
