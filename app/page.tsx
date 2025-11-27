@@ -13,6 +13,20 @@ import imageCompression from 'browser-image-compression';
 // FUNCIONES AUXILIARES
 // ============================================
 
+// Gestión de cookies para el nombre del invitado
+function setCookie(name: string, value: string, days: number) {
+  const expires = new Date();
+  expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
+  document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+}
+
+function getCookie(name: string): string | null {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
+  return null;
+}
+
 // Crear placeholder para videos (gris + icono play)
 function createPlaceholder(): Blob {
   const canvas = document.createElement('canvas');
@@ -77,8 +91,6 @@ async function uploadFile(
     // VIDEOS → Supabase Storage
     // ============================================
     if (isVideo) {
-      console.log('📹 Procesando video:', file.name, '-', (file.size / 1024 / 1024).toFixed(2), 'MB');
-
       // 1. VALIDAR PESO
       const sizeMB = file.size / 1024 / 1024;
       
@@ -93,17 +105,14 @@ async function uploadFile(
       }
 
       // 2. OBTENER DURACIÓN
-      console.log('⏱️ Obteniendo duración...');
       let duration = 0;
       try {
         duration = await getVideoDuration(file);
-        console.log(`✅ Duración: ${duration} segundos`);
       } catch (error) {
-        console.warn('⚠️ No se pudo obtener duración:', error);
+        // Continuar sin duración si falla
       }
 
       // 3. CREAR PLACEHOLDER
-      console.log('🎬 Creando placeholder...');
       const thumbnailBlob = createPlaceholder();
 
       // 4. SUBIR THUMBNAIL
@@ -111,13 +120,12 @@ async function uploadFile(
       const randomId = Math.random().toString(36).substring(7);
       const thumbFileName = `thumb_video_${timestamp}-${randomId}.jpg`;
       
-      console.log('⬆️ Subiendo thumbnail...');
       const { error: thumbError } = await supabase.storage
         .from('wedding-photos')
         .upload(thumbFileName, thumbnailBlob);
 
       if (thumbError) {
-        console.error('❌ Error subiendo thumbnail:', thumbError);
+        console.error('Error subiendo thumbnail:', thumbError);
         onError('Error subiendo thumbnail del video.');
         return null;
       }
@@ -129,13 +137,12 @@ async function uploadFile(
       // 5. SUBIR VIDEO
       const videoFileName = `video_${timestamp}-${randomId}.${file.name.split('.').pop()}`;
       
-      console.log('⬆️ Subiendo video...');
       const { error: videoError } = await supabase.storage
         .from('wedding-videos')
         .upload(videoFileName, file);
 
       if (videoError) {
-        console.error('❌ Error subiendo video:', videoError);
+        console.error('Error subiendo video:', videoError);
         onError('Error subiendo video.');
         return null;
       }
@@ -143,8 +150,6 @@ async function uploadFile(
       const { data: { publicUrl: videoUrl } } = supabase.storage
         .from('wedding-videos')
         .getPublicUrl(videoFileName);
-
-      console.log('✅ Video y thumbnail subidos');
 
       // 6. GUARDAR EN DB
       const { error: dbError } = await supabase
@@ -177,23 +182,19 @@ async function uploadFile(
     const randomId = Math.random().toString(36).substring(7);
     const baseFileName = `${timestamp}-${randomId}`;
 
-    console.log('📦 Procesando imagen:', file.name, '-', (file.size / 1024 / 1024).toFixed(2), 'MB');
-
     // 1. SUBIR ORIGINAL
     const originalFileName = `original_${baseFileName}.jpg`;
-    console.log('⬆️ Subiendo ORIGINAL...');
     
     const { error: originalError } = await supabase.storage
       .from('wedding-photos')
       .upload(originalFileName, file);
 
     if (originalError) {
-      console.error('❌ Error subiendo original:', originalError);
+      console.error('Error subiendo original:', originalError);
       return null;
     }
 
     // 2. VERSIÓN WEB
-    console.log('🔄 Generando versión WEB...');
     const webOptions = {
       maxSizeMB: 0.5,
       maxWidthOrHeight: 1920,
@@ -203,19 +204,17 @@ async function uploadFile(
 
     const webFile = await imageCompression(file, webOptions);
     const webFileName = `web_${baseFileName}.jpg`;
-    console.log('⬆️ Subiendo WEB:', (webFile.size / 1024).toFixed(0), 'KB');
 
     const { error: webError } = await supabase.storage
       .from('wedding-photos')
       .upload(webFileName, webFile);
 
     if (webError) {
-      console.error('❌ Error subiendo web:', webError);
+      console.error('Error subiendo web:', webError);
       return null;
     }
 
     // 3. THUMBNAIL
-    console.log('🔄 Generando THUMBNAIL...');
     const thumbOptions = {
       maxSizeMB: 0.05,
       maxWidthOrHeight: 400,
@@ -225,14 +224,13 @@ async function uploadFile(
 
     const thumbFile = await imageCompression(file, thumbOptions);
     const thumbFileName = `thumb_${baseFileName}.jpg`;
-    console.log('⬆️ Subiendo THUMBNAIL:', (thumbFile.size / 1024).toFixed(0), 'KB');
 
     const { error: thumbError } = await supabase.storage
       .from('wedding-photos')
       .upload(thumbFileName, thumbFile);
 
     if (thumbError) {
-      console.error('❌ Error subiendo thumbnail:', thumbError);
+      console.error('Error subiendo thumbnail:', thumbError);
       return null;
     }
 
@@ -425,16 +423,10 @@ function VideoInGallery({
             
             // Si llega a 10 segundos (o más), reiniciar
             if (video.currentTime >= 10) {
-              console.log('🔄 Llegó a 10s, reiniciando loop');
               video.currentTime = 0;
-              video.play().catch((e) => {
-                console.error('❌ Error reiniciando video:', e);
+              video.play().catch(() => {
+                // Ignorar errores de autoplay
               });
-            }
-            
-            // Log cada 3 segundos para no saturar
-            if (Math.floor(video.currentTime) % 3 === 0) {
-              console.log(`⏱️ Video en: ${video.currentTime.toFixed(1)}s / ${video.duration.toFixed(1)}s`);
             }
           }}
         />
@@ -478,7 +470,7 @@ function VideoInGallery({
 export default function Home() {
   const [photos, setPhotos] = useState<PhotoData[]>([]);
   const [guestName, setGuestName] = useState<string | null>(null);  
-  const [showModal, setShowModal] = useState(true);
+  const [showModal, setShowModal] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ uploadedBytes: 0, totalBytes: 0 });
   const [showSuccess, setShowSuccess] = useState(false);
@@ -496,6 +488,16 @@ export default function Home() {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  // Cargar nombre desde cookie al montar
+  useEffect(() => {
+    const savedName = getCookie('guestName');
+    if (savedName) {
+      setGuestName(savedName);
+    } else {
+      setShowModal(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (selectedPhotoIndex === null) return;
@@ -631,17 +633,52 @@ export default function Home() {
     if (name) {
       setGuestName(name);
       localStorage.setItem('guestName', name);
+      setCookie('guestName', name, 30); // Cookie dura 30 días
       setShowModal(false);
+    }
+  };
+
+  const deleteMedia = async (photoUrl: string, videoUrl?: string) => {
+    const confirmed = confirm('¿Seguro que quieres eliminar este archivo?');
+    if (!confirmed) return;
+
+    try {
+      // 1. Extraer nombres de archivo de las URLs
+      const photoFileName = photoUrl.split('/').pop();
+      
+      // 2. Borrar de Storage
+      if (photoFileName) {
+        await supabase.storage.from('wedding-photos').remove([photoFileName]);
+      }
+      
+      if (videoUrl) {
+        const videoFileName = videoUrl.split('/').pop();
+        if (videoFileName) {
+          await supabase.storage.from('wedding-videos').remove([videoFileName]);
+        }
+      }
+
+      // 3. Borrar de DB
+      await supabase.from('uploads').delete().eq('photo_url', photoUrl);
+
+      // 4. Actualizar UI
+      setPhotos(prev => prev.filter(p => p.photo_url !== photoUrl));
+      
+      // 5. Cerrar modal si está abierto
+      if (selectedPhotoIndex !== null) {
+        setSelectedPhotoIndex(null);
+      }
+    } catch (error) {
+      console.error('Error eliminando:', error);
+      alert('Error al eliminar. Inténtalo de nuevo.');
     }
   };
 
   const handleUpload = async (files: FileList) => {
     const fileArray = Array.from(files);
-    console.log('📸 Archivos seleccionados:', fileArray);
 
     // Calcular peso total en bytes
     const totalBytes = fileArray.reduce((sum, file) => sum + file.size, 0);
-    console.log('📦 Peso total:', (totalBytes / 1024 / 1024).toFixed(2), 'MB');
 
     setIsUploading(true);
     setShouldCancel(false);
@@ -649,14 +686,12 @@ export default function Home() {
     setFailedFiles([]);
     setUploadProgress({ uploadedBytes: 0, totalBytes });
 
-    console.log('⬆️ Iniciando subida...');
     const newPhotos: PhotoData[] = [];
     const failed: File[] = [];
     let uploadedSoFar = 0; // Acumulador de bytes completados
     
     for (let i = 0; i < fileArray.length; i++) {
       if (shouldCancel) {
-        console.log('🚫 Subida cancelada por el usuario');
         setUploadError('Subida cancelada');
         break;
       }
@@ -666,7 +701,6 @@ export default function Home() {
       const result = await uploadFile(file, guestName, setUploadError);
       
       if (result) {
-        console.log('✅ Archivo subido:', result.url);
         newPhotos.push({ 
           photo_url: result.url, 
           video_url: result.videoUrl,
@@ -679,7 +713,6 @@ export default function Home() {
         uploadedSoFar += file.size;
         setUploadProgress({ uploadedBytes: uploadedSoFar, totalBytes });
       } else {
-        console.error('❌ Falló:', file.name);
         failed.push(file);
       }
     }
@@ -698,8 +731,6 @@ export default function Home() {
 
     setIsUploading(false);
     setShouldCancel(false);
-    
-    console.log(`🎉 Subida completada: ${newPhotos.length} exitosas, ${failed.length} fallidas`);
   };
 
   const openFileSelector = () => {
@@ -945,6 +976,19 @@ export default function Home() {
             >
               ×
             </button>
+
+            {/* Botón eliminar (solo si es del usuario actual) */}
+            {photos[selectedPhotoIndex].guest_name === guestName && (
+              <button
+                onClick={() => deleteMedia(photos[selectedPhotoIndex].photo_url, photos[selectedPhotoIndex].video_url)}
+                className="absolute top-4 right-16 text-white bg-red-500 p-2 rounded-full hover:bg-red-600 z-10"
+                title="Eliminar"
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                </svg>
+              </button>
+            )}
 
             <button
               onClick={goToPrevPhoto}
