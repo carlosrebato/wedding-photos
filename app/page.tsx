@@ -8,7 +8,6 @@ import Lottie from 'lottie-react';
 import uploadArrowAnimation from '@/public/animations/upload-arrow.json';
 import checkSuccessAnimation from '@/public/animations/check-success.json';
 import imageCompression from 'browser-image-compression';
-import { Analytics } from "@vercel/analytics/next";
 
 // ============================================
 // FUNCIONES AUXILIARES
