@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -8,33 +9,189 @@ import uploadArrowAnimation from '@/public/animations/upload-arrow.json';
 import checkSuccessAnimation from '@/public/animations/check-success.json';
 import imageCompression from 'browser-image-compression';
 
-async function uploadFile(file: File, guestName: string | null): Promise<string | null> {
-  try {
-    // Si no es imagen, subir tal cual
-    if (!file.type.startsWith('image/')) {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+// ============================================
+// FUNCIONES AUXILIARES
+// ============================================
+
+// Extraer primer frame del video como thumbnail
+async function extractVideoFrame(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    video.src = URL.createObjectURL(file);
+    
+    const timeout = setTimeout(() => {
+      URL.revokeObjectURL(video.src);
+      reject(new Error('Timeout extracting video frame'));
+    }, 10000); // 10 segundos de timeout
+    
+    video.onloadeddata = () => {
+      // Ir al segundo 1 o mitad del video si es muy corto
+      video.currentTime = Math.min(1, video.duration / 2);
+    };
+    
+    video.onseeked = () => {
+      clearTimeout(timeout);
       
-      console.log('⬆️ Subiendo archivo:', fileName);
+      const canvas = document.createElement('canvas');
+      canvas.width = 400;
+      canvas.height = 400;
+      const ctx = canvas.getContext('2d');
+      
+      if (ctx) {
+        // Centrar y crop para aspect ratio 1:1
+        const scale = Math.max(400 / video.videoWidth, 400 / video.videoHeight);
+        const w = video.videoWidth * scale;
+        const h = video.videoHeight * scale;
+        const x = (400 - w) / 2;
+        const y = (400 - h) / 2;
+        
+        ctx.drawImage(video, x, y, w, h);
+        
+        canvas.toBlob((blob) => {
+          URL.revokeObjectURL(video.src);
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error('No se pudo crear blob del thumbnail'));
+          }
+        }, 'image/jpeg', 0.8);
+      } else {
+        URL.revokeObjectURL(video.src);
+        reject(new Error('No se pudo crear canvas'));
+      }
+    };
+    
+    video.onerror = () => {
+      clearTimeout(timeout);
+      URL.revokeObjectURL(video.src);
+      reject(new Error('Error cargando video'));
+    };
+  });
+}
 
-      const { data, error } = await supabase.storage
-        .from('wedding-photos')
-        .upload(fileName, file);
+// Obtener duración del video
+async function getVideoDuration(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    video.src = URL.createObjectURL(file);
+    
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(video.src);
+      resolve(Math.round(video.duration));
+    };
+    
+    video.onerror = () => {
+      URL.revokeObjectURL(video.src);
+      reject(new Error('Error obteniendo duración'));
+    };
+  });
+}
 
-      if (error) {
-        console.error('❌ Error subiendo:', error);
+// Upload de archivo (foto o video)
+async function uploadFile(
+  file: File, 
+  guestName: string | null,
+  onError: (msg: string) => void
+): Promise<{ url: string; mediaType: 'image' | 'video'; videoUrl?: string; duration?: number } | null> {
+  try {
+    const isVideo = file.type.startsWith('video/');
+
+    // ============================================
+    // VIDEOS → Supabase Storage
+    // ============================================
+    if (isVideo) {
+      console.log('📹 Procesando video:', file.name, '-', (file.size / 1024 / 1024).toFixed(2), 'MB');
+
+      // 1. VALIDAR PESO
+      const sizeMB = file.size / 1024 / 1024;
+      
+      if (sizeMB > 200) {
+        onError('Video muy grande. Máximo 200MB.');
+        return null;
+      }
+      
+      if (sizeMB > 100) {
+        const confirmed = confirm(`⚠️ Este video pesa ${sizeMB.toFixed(0)}MB. ¿Continuar? (puede tardar)`);
+        if (!confirmed) return null;
+      }
+
+      // 2. OBTENER DURACIÓN
+      console.log('⏱️ Obteniendo duración...');
+      let duration = 0;
+      try {
+        duration = await getVideoDuration(file);
+        console.log(`✅ Duración: ${duration} segundos`);
+      } catch (error) {
+        console.warn('⚠️ No se pudo obtener duración:', error);
+      }
+
+      // 3. EXTRAER THUMBNAIL
+      console.log('🎬 Extrayendo thumbnail...');
+      let thumbnailBlob: Blob;
+      try {
+        thumbnailBlob = await extractVideoFrame(file);
+        console.log('✅ Thumbnail extraído');
+      } catch (error) {
+        console.error('❌ Error extrayendo thumbnail:', error);
+        onError('Error procesando video. Intenta con otro.');
         return null;
       }
 
-      const { data: { publicUrl } } = supabase.storage
+      // 4. SUBIR THUMBNAIL
+      const timestamp = Date.now();
+      const randomId = Math.random().toString(36).substring(7);
+      const thumbFileName = `thumb_video_${timestamp}-${randomId}.jpg`;
+      
+      console.log('⬆️ Subiendo thumbnail...');
+      const { error: thumbError } = await supabase.storage
         .from('wedding-photos')
-        .getPublicUrl(fileName);
+        .upload(thumbFileName, thumbnailBlob);
 
+      if (thumbError) {
+        console.error('❌ Error subiendo thumbnail:', thumbError);
+        onError('Error subiendo thumbnail del video.');
+        return null;
+      }
+
+      const { data: { publicUrl: thumbnailUrl } } = supabase.storage
+        .from('wedding-photos')
+        .getPublicUrl(thumbFileName);
+
+      // 5. SUBIR VIDEO
+      const videoFileName = `video_${timestamp}-${randomId}.${file.name.split('.').pop()}`;
+      
+      console.log('⬆️ Subiendo video...');
+      const { error: videoError } = await supabase.storage
+        .from('wedding-videos')
+        .upload(videoFileName, file);
+
+      if (videoError) {
+        console.error('❌ Error subiendo video:', videoError);
+        onError('Error subiendo video.');
+        return null;
+      }
+
+      const { data: { publicUrl: videoUrl } } = supabase.storage
+        .from('wedding-videos')
+        .getPublicUrl(videoFileName);
+
+      console.log('✅ Video y thumbnail subidos');
+
+      // 6. GUARDAR EN DB
       const { error: dbError } = await supabase
         .from('uploads')
         .insert({
-          photo_url: publicUrl,
-          guest_name: guestName
+          photo_url: thumbnailUrl,
+          video_url: videoUrl,
+          guest_name: guestName,
+          media_type: 'video',
+          duration: duration
         });
 
       if (dbError) {
@@ -42,17 +199,24 @@ async function uploadFile(file: File, guestName: string | null): Promise<string 
         return null;
       }
 
-      return publicUrl;
+      return { 
+        url: thumbnailUrl, 
+        mediaType: 'video',
+        videoUrl: videoUrl,
+        duration: duration
+      };
     }
 
-    // PARA IMÁGENES: Generar 3 versiones
+    // ============================================
+    // IMÁGENES → Supabase Storage (3 versiones)
+    // ============================================
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substring(7);
     const baseFileName = `${timestamp}-${randomId}`;
 
     console.log('📦 Procesando imagen:', file.name, '-', (file.size / 1024 / 1024).toFixed(2), 'MB');
 
-    // 1. SUBIR ORIGINAL (sin comprimir)
+    // 1. SUBIR ORIGINAL
     const originalFileName = `original_${baseFileName}.jpg`;
     console.log('⬆️ Subiendo ORIGINAL...');
     
@@ -65,7 +229,7 @@ async function uploadFile(file: File, guestName: string | null): Promise<string 
       return null;
     }
 
-    // 2. GENERAR Y SUBIR VERSIÓN WEB (para modal)
+    // 2. VERSIÓN WEB
     console.log('🔄 Generando versión WEB...');
     const webOptions = {
       maxSizeMB: 0.5,
@@ -87,7 +251,7 @@ async function uploadFile(file: File, guestName: string | null): Promise<string 
       return null;
     }
 
-    // 3. GENERAR Y SUBIR THUMBNAIL (para galería)
+    // 3. THUMBNAIL
     console.log('🔄 Generando THUMBNAIL...');
     const thumbOptions = {
       maxSizeMB: 0.05,
@@ -109,19 +273,19 @@ async function uploadFile(file: File, guestName: string | null): Promise<string 
       return null;
     }
 
-    // Obtener URL pública del THUMBNAIL (es la que se guarda en la DB)
     const { data: { publicUrl } } = supabase.storage
       .from('wedding-photos')
       .getPublicUrl(thumbFileName);
 
     console.log('✅ 3 versiones subidas correctamente');
 
-    // Guardar en base de datos (con URL del thumbnail)
     const { error: dbError } = await supabase
       .from('uploads')
       .insert({
         photo_url: publicUrl,
-        guest_name: guestName
+        video_url: null,
+        guest_name: guestName,
+        media_type: 'image',
       });
 
     if (dbError) {
@@ -129,8 +293,7 @@ async function uploadFile(file: File, guestName: string | null): Promise<string 
       return null;
     }
 
-    console.log('✅ Guardado en DB');
-    return publicUrl;
+    return { url: publicUrl, mediaType: 'image' };
 
   } catch (error) {
     console.error('❌ Error:', error);
@@ -140,14 +303,17 @@ async function uploadFile(file: File, guestName: string | null): Promise<string 
 
 interface PhotoData {
   photo_url: string;
+  video_url?: string;
   guest_name: string | null;
+  media_type: 'image' | 'video';
+  duration?: number;
 }
 
 async function loadPhotos(limit: number = 30, offset: number = 0): Promise<PhotoData[]> {
   try {
     const { data, error } = await supabase
       .from('uploads')
-      .select('photo_url, guest_name')
+      .select('photo_url, video_url, guest_name, media_type, duration')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -170,6 +336,10 @@ function getWebUrl(thumbUrl: string): string {
   return thumbUrl.replace('thumb_', 'web_');
 }
 
+// ============================================
+// COMPONENTES
+// ============================================
+
 // Componente Skeleton para galería
 function GallerySkeleton({ count = 8 }: { count?: number }) {
   return (
@@ -185,20 +355,18 @@ function GallerySkeleton({ count = 8 }: { count?: number }) {
 }
 
 // Componente de imagen con loading state para modal
-function ImageWithLoader({ src, alt, onLoad }: { src: string; alt: string; onLoad?: () => void }) {
+function ImageWithLoader({ src, alt }: { src: string; alt: string }) {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
   return (
     <div className="relative w-full max-w-4xl max-h-[70vh] flex items-center justify-center">
-      {/* Spinner mientras carga */}
       {isLoading && !hasError && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
         </div>
       )}
 
-      {/* Mensaje de error */}
       {hasError && (
         <div className="text-white text-center">
           <p className="text-xl mb-2">⚠️ Error al cargar la imagen</p>
@@ -206,17 +374,13 @@ function ImageWithLoader({ src, alt, onLoad }: { src: string; alt: string; onLoa
         </div>
       )}
 
-      {/* Imagen */}
       <img
         src={src}
         alt={alt}
         className={`max-w-full max-h-[70vh] object-contain rounded-lg transition-opacity duration-300 ${
           isLoading ? 'opacity-0' : 'opacity-100'
         }`}
-        onLoad={() => {
-          setIsLoading(false);
-          onLoad?.();
-        }}
+        onLoad={() => setIsLoading(false)}
         onError={() => {
           setIsLoading(false);
           setHasError(true);
@@ -225,6 +389,111 @@ function ImageWithLoader({ src, alt, onLoad }: { src: string; alt: string; onLoa
     </div>
   );
 }
+
+// Componente VideoInGallery con lazy load y #t=0,10
+function VideoInGallery({ 
+  videoUrl, 
+  thumbnailUrl, 
+  index,
+  likes, 
+  onClick
+}: { 
+  videoUrl: string;
+  thumbnailUrl: string;
+  index: number;
+  likes: number;
+  onClick: () => void;
+}) {
+  const [shouldLoad, setShouldLoad] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            // Delay progresivo según posición
+            setTimeout(() => {
+              setShouldLoad(true);
+              videoRef.current?.play().catch(() => {
+                // Ignorar errores de autoplay
+              });
+            }, index * 200);
+          } else {
+            // Salió del viewport: limpiar
+            setShouldLoad(false);
+            if (videoRef.current) {
+              videoRef.current.pause();
+              videoRef.current.src = '';
+            }
+          }
+        });
+      },
+      { threshold: 0.3 }
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [index]);
+
+  return (
+    <div 
+      ref={containerRef}
+      className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
+      onClick={onClick}
+    >
+      {shouldLoad ? (
+        <video
+          ref={videoRef}
+          src={`${videoUrl}#t=0,10`}
+          poster={thumbnailUrl}
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="metadata"
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        <img 
+          src={thumbnailUrl}
+          alt="Video thumbnail"
+          className="w-full h-full object-cover"
+          loading="lazy"
+        />
+      )}
+      
+      {/* Icono play */}
+      <div className="absolute bottom-2 left-2 bg-black bg-opacity-60 rounded-full p-2">
+        <span className="text-white text-xl">▶️</span>
+      </div>
+      
+      {/* Likes */}
+      {likes > 0 && (
+        <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded-full text-sm flex items-center gap-1">
+          <svg 
+            width="16" 
+            height="16" 
+            viewBox="0 0 24 24" 
+            fill="#ef4444"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+          </svg>
+          <span>{likes}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// COMPONENTE PRINCIPAL
+// ============================================
 
 export default function Home() {
   const [photos, setPhotos] = useState<PhotoData[]>([]);
@@ -237,44 +506,43 @@ export default function Home() {
   const [photoLikes, setPhotoLikes] = useState<Record<string, number>>({});
   const [userLikes, setUserLikes] = useState<Set<string>>(new Set());
   
-  // Estados para error handling
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [failedFiles, setFailedFiles] = useState<File[]>([]);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [shouldCancel, setShouldCancel] = useState(false);
 
-  // Estados para infinite scroll
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  // Preload de imágenes siguiente/anterior en modal
   useEffect(() => {
     if (selectedPhotoIndex === null) return;
 
     const preloadUrls: string[] = [];
     
-    // Precargar siguiente
     if (selectedPhotoIndex < photos.length - 1) {
-      preloadUrls.push(getWebUrl(photos[selectedPhotoIndex + 1].photo_url));
+      const nextPhoto = photos[selectedPhotoIndex + 1];
+      if (nextPhoto.media_type === 'image') {
+        preloadUrls.push(getWebUrl(nextPhoto.photo_url));
+      }
     }
     
-    // Precargar anterior
     if (selectedPhotoIndex > 0) {
-      preloadUrls.push(getWebUrl(photos[selectedPhotoIndex - 1].photo_url));
+      const prevPhoto = photos[selectedPhotoIndex - 1];
+      if (prevPhoto.media_type === 'image') {
+        preloadUrls.push(getWebUrl(prevPhoto.photo_url));
+      }
     }
 
-    // Crear elementos Image para precargar
     preloadUrls.forEach(url => {
       const img = new window.Image();
       img.src = url;
     });
   }, [selectedPhotoIndex, photos]);
 
-  // Cargar todos los likes al inicio
-  const loadAllLikes = async () => {
+  const loadAllLikes = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('likes')
@@ -285,7 +553,6 @@ export default function Home() {
         return;
       }
 
-      // Contar likes por foto
       const likesCount: Record<string, number> = {};
       const userLikesSet = new Set<string>();
 
@@ -304,9 +571,8 @@ export default function Home() {
     } catch (error) {
       console.error('❌ Error:', error);
     }
-  };
+  }, [guestName]);
 
-  // Cargar más fotos (infinite scroll)
   const loadMore = useCallback(async () => {
     if (isLoadingMore || !hasMore) return;
 
@@ -326,7 +592,6 @@ export default function Home() {
     setIsLoadingMore(false);
   }, [photos.length, isLoadingMore, hasMore]);
 
-  // Setup Intersection Observer para infinite scroll
   useEffect(() => {
     if (!loadMoreRef.current) return;
 
@@ -358,7 +623,6 @@ export default function Home() {
     async function fetchData() {
       setIsInitialLoading(true);
       
-      // Cargar primeras 30 fotos
       const photosData = await loadPhotos(30, 0);
       setPhotos(photosData);
       
@@ -366,21 +630,17 @@ export default function Home() {
         setHasMore(false);
       }
       
-      // Cargar likes después de cargar fotos
-      await loadAllLikes();
-      
       setIsInitialLoading(false);
     }
     
     fetchData();
   }, []);
 
-  // Recargar likes cuando cambie el nombre del usuario
   useEffect(() => {
     if (guestName && photos.length > 0) {
       loadAllLikes();
     }
-  }, [guestName]);
+  }, [guestName, photos.length, loadAllLikes]);
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -420,10 +680,16 @@ export default function Home() {
       
       setUploadProgress({ current: i + 1, total: fileArray.length });
       
-      const url = await uploadFile(file, guestName);
-      if (url) {
-        console.log('✅ Foto subida:', url);
-        newPhotos.push({ photo_url: url, guest_name: guestName });
+      const result = await uploadFile(file, guestName, setUploadError);
+      if (result) {
+        console.log('✅ Archivo subido:', result.url);
+        newPhotos.push({ 
+          photo_url: result.url, 
+          video_url: result.videoUrl,
+          guest_name: guestName,
+          media_type: result.mediaType,
+          duration: result.duration
+        });
       } else {
         console.error('❌ Falló:', file.name);
         failed.push(file);
@@ -478,42 +744,6 @@ export default function Home() {
     handleUpload(dt.files);
   };
 
-  const loadLikes = async (photoUrl: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('likes')
-        .select('guest_name')
-        .eq('photo_url', photoUrl);
-
-      if (error) {
-        console.error('❌ Error cargando likes:', error);
-        return 0;
-      }
-
-      return data.length;
-    } catch (error) {
-      console.error('❌ Error:', error);
-      return 0;
-    }
-  };
-
-  const checkUserLike = async (photoUrl: string) => {
-    if (!guestName) return false;
-
-    try {
-      const { data, error } = await supabase
-        .from('likes')
-        .select('id')
-        .eq('photo_url', photoUrl)
-        .eq('guest_name', guestName)
-        .single();
-
-      return !!data;
-    } catch (error) {
-      return false;
-    }
-  };
-
   const toggleLike = async (photoUrl: string) => {
     if (!guestName) return;
 
@@ -558,17 +788,8 @@ export default function Home() {
     }
   };
 
-  const openPhotoModal = async (index: number) => {
+  const openPhotoModal = (index: number) => {
     setSelectedPhotoIndex(index);
-    
-    const photoUrl = photos[index].photo_url;
-    const likes = await loadLikes(photoUrl);
-    const hasLiked = await checkUserLike(photoUrl);
-
-    setPhotoLikes(prev => ({ ...prev, [photoUrl]: likes }));
-    if (hasLiked) {
-      setUserLikes(prev => new Set(prev).add(photoUrl));
-    }
   };
 
   const goToPrevPhoto = () => {
@@ -593,9 +814,9 @@ export default function Home() {
     if (!acc[name]) {
       acc[name] = [];
     }
-    acc[name].push(photo.photo_url);
+    acc[name].push(photo);
     return acc;
-  }, {} as Record<string, string[]>);
+  }, {} as Record<string, PhotoData[]>);
 
   return (
     <>
@@ -718,7 +939,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Modal fullscreen de foto */}
+      {/* Modal fullscreen de foto/video */}
       {selectedPhotoIndex !== null && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center"
@@ -743,10 +964,19 @@ export default function Home() {
             </button>
 
             <div className="max-w-4xl max-h-full flex flex-col items-center">
-              <ImageWithLoader 
-                src={getWebUrl(photos[selectedPhotoIndex].photo_url)}
-                alt="Foto"
-              />
+              {photos[selectedPhotoIndex].media_type === 'video' && photos[selectedPhotoIndex].video_url ? (
+                <video
+                  src={photos[selectedPhotoIndex].video_url}
+                  controls
+                  autoPlay
+                  className="max-w-full max-h-[70vh] rounded-lg"
+                />
+              ) : (
+                <ImageWithLoader 
+                  src={getWebUrl(photos[selectedPhotoIndex].photo_url)}
+                  alt="Foto"
+                />
+              )}
 
               <button
                 onClick={() => toggleLike(photos[selectedPhotoIndex].photo_url)}
@@ -821,49 +1051,72 @@ export default function Home() {
             </div>
           ) : (
             <>
-              {Object.entries(photosByGuest).map(([name, urls]) => (
-                <div key={name} className="mb-12">
-                  <h2 className="text-xl font-semibold mb-4 text-gray-800">
-                    {name} subió {urls.length} {urls.length === 1 ? 'foto' : 'fotos'}
-                  </h2>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                    {urls.map((url, index) => {
-                      const globalIndex = photos.findIndex(p => p.photo_url === url);
-                      const likes = photoLikes[url] || 0;
-                      
-                      return (
-                        <div 
-                          key={index} 
-                          className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
-                          onClick={() => openPhotoModal(globalIndex)}
-                        >
-                          <img
-                            src={url}
-                            alt={`Foto de ${name}`}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                            loading="lazy"
+              {Object.entries(photosByGuest).map(([name, items]) => {
+                const photoCount = items.filter(i => i.media_type === 'image').length;
+                const videoCount = items.filter(i => i.media_type === 'video').length;
+                
+                let subtitle = '';
+                if (photoCount > 0 && videoCount > 0) {
+                  subtitle = `${photoCount} ${photoCount === 1 ? 'foto' : 'fotos'} y ${videoCount} ${videoCount === 1 ? 'vídeo' : 'vídeos'}`;
+                } else if (photoCount > 0) {
+                  subtitle = `${photoCount} ${photoCount === 1 ? 'foto' : 'fotos'}`;
+                } else {
+                  subtitle = `${videoCount} ${videoCount === 1 ? 'vídeo' : 'vídeos'}`;
+                }
+
+                return (
+                  <div key={name} className="mb-12">
+                    <h2 className="text-xl font-semibold mb-4 text-gray-800">
+                      {name} subió {subtitle}
+                    </h2>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                      {items.map((item, index) => {
+                        const globalIndex = photos.findIndex(p => p.photo_url === item.photo_url);
+                        const likes = photoLikes[item.photo_url] || 0;
+                        
+                        return item.media_type === 'video' && item.video_url ? (
+                          <VideoInGallery
+                            key={index}
+                            videoUrl={item.video_url}
+                            thumbnailUrl={item.photo_url}
+                            index={index}
+                            likes={likes}
+                            onClick={() => openPhotoModal(globalIndex)}
                           />
-                          
-                          {likes > 0 && (
-                            <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded-full text-sm flex items-center gap-1">
-                              <svg 
-                                width="16" 
-                                height="16" 
-                                viewBox="0 0 24 24" 
-                                fill="#ef4444"
-                                xmlns="http://www.w3.org/2000/svg"
-                              >
-                                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                              </svg>
-                              <span>{likes}</span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                        ) : (
+                          <div 
+                            key={index} 
+                            className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
+                            onClick={() => openPhotoModal(globalIndex)}
+                          >
+                            <img
+                              src={item.photo_url}
+                              alt={`Foto de ${name}`}
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                              loading="lazy"
+                            />
+                            
+                            {likes > 0 && (
+                              <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded-full text-sm flex items-center gap-1">
+                                <svg 
+                                  width="16" 
+                                  height="16" 
+                                  viewBox="0 0 24 24" 
+                                  fill="#ef4444"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                >
+                                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                                </svg>
+                                <span>{likes}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {/* Trigger para infinite scroll */}
               <div ref={loadMoreRef} className="h-20 flex items-center justify-center">
