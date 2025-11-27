@@ -638,33 +638,59 @@ export default function Home() {
     }
   };
 
-  const deleteMedia = async (photoUrl: string, videoUrl?: string) => {
+  const deleteMedia = async (photoUrl: string, videoUrl?: string, mediaType?: 'image' | 'video') => {
     const confirmed = confirm('¿Seguro que quieres eliminar este archivo?');
     if (!confirmed) return;
 
     try {
-      // 1. Extraer nombres de archivo de las URLs
-      const photoFileName = photoUrl.split('/').pop();
-      
-      // 2. Borrar de Storage
-      if (photoFileName) {
-        await supabase.storage.from('wedding-photos').remove([photoFileName]);
-      }
-      
+      // Extraer nombre base del archivo desde la URL
+      const extractFileName = (url: string): string | null => {
+        // URLs de Supabase: https://.../storage/v1/object/public/bucket/filename.ext
+        const match = url.match(/\/([^/]+\.[a-z0-9]+)(?:\?|$)/i);
+        return match ? match[1] : null;
+      };
+
+      const filesToDelete: string[] = [];
+
       if (videoUrl) {
-        const videoFileName = videoUrl.split('/').pop();
+        // ES UN VIDEO
+        // 1. Borrar thumbnail del video
+        const thumbFileName = extractFileName(photoUrl);
+        if (thumbFileName) {
+          filesToDelete.push(thumbFileName);
+        }
+
+        // 2. Borrar video completo
+        const videoFileName = extractFileName(videoUrl);
         if (videoFileName) {
           await supabase.storage.from('wedding-videos').remove([videoFileName]);
         }
+      } else {
+        // ES UNA FOTO
+        // Extraer el ID base del nombre (ej: thumb_1234567-abc.jpg → 1234567-abc)
+        const thumbFileName = extractFileName(photoUrl);
+        if (thumbFileName) {
+          const baseId = thumbFileName.replace(/^(thumb_|web_|original_)/, '').replace(/\.[^.]+$/, '');
+          
+          // Borrar las 3 versiones
+          filesToDelete.push(`thumb_${baseId}.jpg`);
+          filesToDelete.push(`web_${baseId}.jpg`);
+          filesToDelete.push(`original_${baseId}.jpg`);
+        }
       }
 
-      // 3. Borrar de DB
+      // Borrar archivos de wedding-photos
+      if (filesToDelete.length > 0) {
+        await supabase.storage.from('wedding-photos').remove(filesToDelete);
+      }
+
+      // Borrar de DB
       await supabase.from('uploads').delete().eq('photo_url', photoUrl);
 
-      // 4. Actualizar UI
+      // Actualizar UI
       setPhotos(prev => prev.filter(p => p.photo_url !== photoUrl));
       
-      // 5. Cerrar modal si está abierto
+      // Cerrar modal si está abierto
       if (selectedPhotoIndex !== null) {
         setSelectedPhotoIndex(null);
       }
