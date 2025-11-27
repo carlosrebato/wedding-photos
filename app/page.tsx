@@ -415,11 +415,20 @@ function VideoInGallery({
           src={`${videoUrl}#t=0,10`}
           poster={thumbnailUrl}
           autoPlay
-          loop
+          loop={false}
           muted
           playsInline
           preload="metadata"
           className="w-full h-full object-cover"
+          onEnded={() => {
+            // Loop manual: al terminar los 10s, volver a empezar
+            if (videoRef.current) {
+              videoRef.current.currentTime = 0;
+              videoRef.current.play().catch(() => {
+                // Ignorar errores de autoplay
+              });
+            }
+          }}
         />
       ) : (
         <img 
