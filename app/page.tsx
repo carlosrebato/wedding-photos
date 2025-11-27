@@ -422,11 +422,19 @@ function VideoInGallery({
           className="w-full h-full object-cover"
           onEnded={() => {
             // Loop manual: al terminar los 10s, volver a empezar
+            console.log('🔄 Video terminó, reiniciando loop');
             if (videoRef.current) {
               videoRef.current.currentTime = 0;
-              videoRef.current.play().catch(() => {
-                // Ignorar errores de autoplay
+              videoRef.current.play().catch((e) => {
+                console.error('❌ Error reiniciando video:', e);
               });
+            }
+          }}
+          onTimeUpdate={(e) => {
+            const video = e.target as HTMLVideoElement;
+            // Log cada 3 segundos para no saturar
+            if (Math.floor(video.currentTime) % 3 === 0) {
+              console.log(`⏱️ Video en: ${video.currentTime.toFixed(1)}s / ${video.duration.toFixed(1)}s`);
             }
           }}
         />
