@@ -606,14 +606,19 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!loadMoreRef.current) {
-      console.log('⚠️ loadMoreRef.current es null');
+    // Esperar a que el elemento esté disponible y no estemos en carga inicial
+    if (!loadMoreRef.current || isInitialLoading) {
       return;
     }
 
-    console.log('👀 IntersectionObserver creado');
+    console.log('👀 IntersectionObserver creado/actualizado');
 
-    observerRef.current = new IntersectionObserver(
+    // Limpiar observer anterior si existe
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+
+    const observer = new IntersectionObserver(
       (entries) => {
         console.log('🔔 IntersectionObserver disparado:', {
           isIntersecting: entries[0].isIntersecting,
@@ -632,14 +637,23 @@ export default function Home() {
       }
     );
 
-    observerRef.current.observe(loadMoreRef.current);
+    observerRef.current = observer;
+    const element = loadMoreRef.current;
+    observer.observe(element);
+
+    // Verificar si el elemento ya es visible al crear el observer
+    // (puede pasar si el usuario hace scroll rápido o hay pocas fotos)
+    const rect = element.getBoundingClientRect();
+    const isVisible = rect.top < window.innerHeight + 1000; // Considerando el rootMargin
+    if (isVisible && !isLoadingMoreRef.current && hasMoreRef.current) {
+      console.log('📌 Elemento ya visible, cargando más fotos inmediatamente');
+      loadMore();
+    }
 
     return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-      }
+      observer.disconnect();
     };
-  }, []); // Solo crear el observer UNA VEZ al montar
+  }, [isInitialLoading, loadMore]); // Re-crear cuando termine la carga inicial o cambie loadMore
 
   useEffect(() => {
     const savedName = localStorage.getItem('guestName');
@@ -658,6 +672,8 @@ export default function Home() {
       if (photosData.length < 60) {
         setHasMore(false);
         hasMoreRef.current = false; // Actualizar ref
+      } else {
+        hasMoreRef.current = true; // Asegurar que esté en true si hay más
       }
       
       setIsInitialLoading(false);
@@ -671,6 +687,15 @@ export default function Home() {
       loadAllLikes();
     }
   }, [guestName, photos.length, loadAllLikes]);
+
+  // Sincronizar refs con estados
+  useEffect(() => {
+    hasMoreRef.current = hasMore;
+  }, [hasMore]);
+
+  useEffect(() => {
+    isLoadingMoreRef.current = isLoadingMore;
+  }, [isLoadingMore]);
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
