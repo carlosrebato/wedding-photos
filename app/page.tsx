@@ -482,6 +482,7 @@ export default function Home() {
   const [failedFiles, setFailedFiles] = useState<File[]>([]);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [shouldCancel, setShouldCancel] = useState(false);
+  const shouldCancelRef = useRef(false); // Ref para cancelación inmediata
 
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -557,6 +558,8 @@ export default function Home() {
   }, [guestName]);
 
   const loadMore = useCallback(async () => {
+    console.log('🔍 loadMore llamado:', { isLoadingMore, hasMore, offset: currentOffsetRef.current });
+    
     if (isLoadingMore || !hasMore) return;
 
     setIsLoadingMore(true);
@@ -566,13 +569,18 @@ export default function Home() {
     const scrollHeight = document.documentElement.scrollHeight;
 
     const offset = currentOffsetRef.current;
+    console.log('📥 Cargando fotos desde offset:', offset);
+    
     const newPhotos = await loadPhotos(20, offset);
+    console.log('✅ Fotos cargadas:', newPhotos.length);
     
     if (newPhotos.length === 0) {
+      console.log('❌ No hay más fotos, hasMore = false');
       setHasMore(false);
     } else {
       // Actualizar offset ANTES de insertar en el estado
       currentOffsetRef.current = offset + newPhotos.length;
+      console.log('📊 Nuevo offset:', currentOffsetRef.current);
       
       setPhotos(prev => [...prev, ...newPhotos]);
       
@@ -591,11 +599,23 @@ export default function Home() {
   }, [isLoadingMore, hasMore]);
 
   useEffect(() => {
-    if (!loadMoreRef.current) return;
+    if (!loadMoreRef.current) {
+      console.log('⚠️ loadMoreRef.current es null');
+      return;
+    }
+
+    console.log('👀 IntersectionObserver creado');
 
     observerRef.current = new IntersectionObserver(
       (entries) => {
+        console.log('🔔 IntersectionObserver disparado:', {
+          isIntersecting: entries[0].isIntersecting,
+          isLoadingMore,
+          hasMore
+        });
+        
         if (entries[0].isIntersecting && !isLoadingMore && hasMore) {
+          console.log('✅ Condiciones cumplidas, llamando a loadMore()');
           loadMore();
         }
       },
@@ -624,11 +644,11 @@ export default function Home() {
     async function fetchData() {
       setIsInitialLoading(true);
       
-      const photosData = await loadPhotos(60, 0);
+      const photosData = await loadPhotos(120, 0); // Aumentado de 60 a 120
       setPhotos(photosData);
       currentOffsetRef.current = photosData.length; // Actualizar offset inicial
       
-      if (photosData.length < 60) {
+      if (photosData.length < 120) { // Cambiar el check también
         setHasMore(false);
       }
       
@@ -728,6 +748,7 @@ export default function Home() {
 
     setIsUploading(true);
     setShouldCancel(false);
+    shouldCancelRef.current = false; // Resetear ref
     setUploadError(null);
     setFailedFiles([]);
     setUploadProgress({ uploadedBytes: 0, totalBytes });
@@ -736,11 +757,8 @@ export default function Home() {
     const failed: File[] = [];
     let uploadedSoFar = 0; // Acumulador de bytes completados
     
-    // Yield al navegador para actualizar UI
-    await new Promise(resolve => setTimeout(resolve, 0));
-    
     for (let i = 0; i < fileArray.length; i++) {
-      if (shouldCancel) {
+      if (shouldCancelRef.current) { // Usar ref en vez de state
         setUploadError('Subida cancelada');
         break;
       }
@@ -770,16 +788,17 @@ export default function Home() {
       setPhotos(prev => [...newPhotos, ...prev]);
     }
 
-    if (failed.length > 0 && !shouldCancel) {
+    if (failed.length > 0 && !shouldCancelRef.current) {
       setFailedFiles(failed);
       setUploadError(`${failed.length} archivo(s) fallaron al subir`);
-    } else if (!shouldCancel && newPhotos.length > 0) {
+    } else if (!shouldCancelRef.current && newPhotos.length > 0) {
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 4000);
     }
 
     setIsUploading(false);
     setShouldCancel(false);
+    shouldCancelRef.current = false; // Resetear ref
   };
 
   const openFileSelector = () => {
@@ -787,15 +806,34 @@ export default function Home() {
     input.type = 'file';
     input.accept = 'image/*,video/*';
     input.multiple = true;
+    
+    // Detectar Safari iOS
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    
     input.onchange = (e) => {
       const files = (e.target as HTMLInputElement).files;
       console.log('🔍 Files seleccionados:', files ? files.length : 0);
-      if (files && files.length > 0) {
-        console.log('✅ Llamando a handleUpload con', files.length, 'archivos');
-        handleUpload(files);
-      } else {
-        console.log('❌ No hay archivos o files es null');
+      
+      if (!files || files.length === 0) {
+        console.log('❌ No hay archivos');
+        
+        // Si es Safari iOS y no hay archivos, probablemente fue cancelado por memoria
+        if (isSafari && isIOS) {
+          setTimeout(() => {
+            alert('⚠️ Safari canceló la selección (probablemente por falta de memoria).\n\n' +
+                  '💡 Soluciones:\n' +
+                  '1. Cierra Safari completamente (desliza hacia arriba desde las apps abiertas)\n' +
+                  '2. Vuelve a intentarlo\n' +
+                  '3. O usa Chrome (soporta más fotos de golpe)');
+          }, 100);
+        }
+        return;
       }
+      
+      console.log('✅ Llamando a handleUpload con', files.length, 'archivos');
+      handleUpload(files);
+      
       // Resetear el input para permitir seleccionar el mismo archivo de nuevo
       input.value = '';
     };
@@ -804,6 +842,7 @@ export default function Home() {
 
   const confirmCancel = () => {
     setShouldCancel(true);
+    shouldCancelRef.current = true; // Actualizar ref también
     setShowCancelModal(false);
   };
 
@@ -1258,47 +1297,48 @@ export default function Home() {
           }}
           disabled={showSuccess}
           className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50"
+          style={{ filter: 'drop-shadow(0 8px 16px rgba(0, 0, 0, 0.3))' }}
         >
-          <div className="relative w-20 h-20 flex items-center justify-center">
+          <div className="relative w-[104px] h-[104px] flex items-center justify-center">
             {isUploading && (
               <svg 
-                className="absolute w-20 h-20" 
-                viewBox="0 0 80 80"
+                className="absolute w-[104px] h-[104px]" 
+                viewBox="0 0 104 104"
               >
                 <circle
-                  cx="40"
-                  cy="40"
-                  r="36"
+                  cx="52"
+                  cy="52"
+                  r="47"
                   stroke="#e5e7eb"
-                  strokeWidth="6"
+                  strokeWidth="8"
                   fill="none"
-                  transform="rotate(-90 40 40)"
+                  transform="rotate(-90 52 52)"
                 />
                 
                 <circle
-                  cx="40"
-                  cy="40"
-                  r="36"
+                  cx="52"
+                  cy="52"
+                  r="47"
                   stroke="#10b981"
-                  strokeWidth="6"
+                  strokeWidth="8"
                   fill="none"
-                  strokeDasharray={`${2 * Math.PI * 36}`}
-                  strokeDashoffset={`${2 * Math.PI * 36 * (1 - (uploadProgress.totalBytes > 0 ? uploadProgress.uploadedBytes / uploadProgress.totalBytes : 0))}`}
+                  strokeDasharray={`${2 * Math.PI * 47}`}
+                  strokeDashoffset={`${2 * Math.PI * 47 * (1 - (uploadProgress.totalBytes > 0 ? uploadProgress.uploadedBytes / uploadProgress.totalBytes : 0))}`}
                   strokeLinecap="round"
-                  transform="rotate(-90 40 40)"
+                  transform="rotate(-90 52 52)"
                   className="transition-all duration-300"
                 />
               </svg>
             )}
 
             <div 
-              className="w-16 h-16 rounded-full flex items-center justify-center shadow-lg z-10 transition-colors duration-300"
+              className="w-[84px] h-[84px] rounded-full flex items-center justify-center shadow-lg z-10 transition-colors duration-300"
               style={{
                 backgroundColor: showSuccess ? '#10b981' : isUploading ? '#3b82f6' : '#6E0005'
               }}
             >
               {showSuccess ? (
-                <div className="w-12 h-12">
+                <div className="w-[62px] h-[62px]">
                   <Lottie 
                     key={Date.now()}
                     animationData={checkSuccessAnimation} 
@@ -1308,7 +1348,7 @@ export default function Home() {
                   />
                 </div>
               ) : isUploading ? (
-                <div className="w-10 h-10" style={{ filter: 'brightness(0) invert(1)' }}>
+                <div className="w-[52px] h-[52px]" style={{ filter: 'brightness(0) invert(1)' }}>
                   <Lottie 
                     animationData={uploadArrowAnimation} 
                     loop={true}
@@ -1316,7 +1356,7 @@ export default function Home() {
                   />
                 </div>
               ) : (
-                <span className="text-3xl text-white font-bold">+</span>
+                <span className="text-[48px] text-white font-bold">+</span>
               )}
             </div>
           </div>
