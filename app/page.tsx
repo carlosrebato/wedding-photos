@@ -416,11 +416,16 @@ function VideoInGallery({
           width="400"
           height="400"
           autoPlay
-          loop={true}
+          loop={false}
           muted
           playsInline
           preload="none"
           className="w-full h-full object-cover"
+          onEnded={(e) => {
+            const video = e.target as HTMLVideoElement;
+            video.currentTime = 0;
+            video.play().catch(() => {});
+          }}
         />
       ) : (
         <img 
