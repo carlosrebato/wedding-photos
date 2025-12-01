@@ -897,42 +897,58 @@ export default function Home() {
       {/* Modal de bienvenida */}
       {showModal && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-          <div className="rounded-lg shadow-xl max-w-md w-full p-6 sm:p-8" style={{ backgroundColor: '#F4EAE3' }}>
-            <h2 className="text-2xl font-bold mb-4 text-center" style={{ color: '#6E0005' }}>
-              ¡Hola! 💕
-            </h2>
-            
-            <p className="mb-6 text-center" style={{ color: '#6E0005' }}>
-              Comparte tus mejores fotos de la boda. Los vídeos, ¡todos bienvenidos!
-            </p>
-      
-            <form onSubmit={handleNameSubmit}>
-              <label className="block mb-4">
-                <span className="text-sm font-medium block mb-2" style={{ color: '#6E0005' }}>
-                  Tu nombre
-                </span>
+          <div 
+            className="relative max-w-md w-full p-8 sm:p-12"
+            style={{
+              backgroundImage: 'url(/assets/tarjeta-fondo.jpg)',
+              backgroundSize: 'contain',
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'center',
+              aspectRatio: '4/3'
+            }}
+          >
+            <div className="flex flex-col items-center justify-center h-full">
+              {/* Arbolito */}
+              <img 
+                src="/assets/arbolito.png" 
+                alt="Arbolito"
+                className="w-16 h-16 mb-4"
+              />
+              
+              {/* Título */}
+              <h2 className="text-3xl font-bold mb-4 text-center" style={{ color: '#6E0005' }}>
+                ¡Hola!
+              </h2>
+              
+              {/* Descripción */}
+              <p className="mb-6 text-center font-medium" style={{ color: '#6E0005' }}>
+                Hemos creado esta web para que puedas subir todas tus fotos y vídeos de la boda
+              </p>
+        
+              {/* Formulario */}
+              <form onSubmit={handleNameSubmit} className="w-full max-w-xs">
                 <input
                   type="text"
                   name="guestName"
                   required
-                  placeholder="Ej: María"
-                  className="w-full px-4 py-3 border rounded-lg"
+                  placeholder="Escribe tu nombre"
+                  className="w-full px-4 py-3 mb-4 rounded-lg text-center"
                   style={{ 
                     backgroundColor: 'white',
-                    borderColor: '#6E0005',
+                    border: '2px solid #D4C5BB',
                     color: '#6E0005'
                   }}
                 />
-              </label>
-      
-              <button
-                type="submit"
-                className="w-full text-white py-3 rounded-lg font-semibold transition-opacity hover:opacity-90"
-                style={{ backgroundColor: '#364136' }}
-              >
-                Continuar
-              </button>
-            </form>
+        
+                <button
+                  type="submit"
+                  className="w-full text-white py-3 rounded-lg font-semibold transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: '#364136' }}
+                >
+                  Continuar
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}
@@ -1154,7 +1170,7 @@ export default function Home() {
 
                 return (
                   <div key={name} className="mb-12">
-                    <h2 className="text-xl font-semibold mb-4 text-gray-800">
+                    <h2 className="text-xl font-semibold mb-4" style={{ color: '#6E0005' }}>
                       {name} subió {subtitle}
                     </h2>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
