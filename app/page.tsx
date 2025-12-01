@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import Image from 'next/image';
 import Lottie from 'lottie-react';
@@ -108,7 +108,7 @@ async function uploadFile(
       let duration = 0;
       try {
         duration = await getVideoDuration(file);
-      } catch (error) {
+      } catch {
         // Continuar sin duración si falla
       }
 
@@ -411,7 +411,7 @@ function VideoInGallery({
       {shouldLoad ? (
         <video
           ref={videoRef}
-          src={videoUrl}
+          src={`${videoUrl}#t=0,10`}
           poster={thumbnailUrl}
           width="400"
           height="400"
@@ -481,7 +481,6 @@ export default function Home() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [failedFiles, setFailedFiles] = useState<File[]>([]);
   const [showCancelModal, setShowCancelModal] = useState(false);
-  const [shouldCancel, setShouldCancel] = useState(false);
   const shouldCancelRef = useRef(false); // Ref para cancelación inmediata
 
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -494,6 +493,7 @@ export default function Home() {
   // Refs para el IntersectionObserver
   const isLoadingMoreRef = useRef(false);
   const hasMoreRef = useRef(true);
+  const loadMoreRefFn = useRef<(() => Promise<void>) | undefined>(undefined);
 
   // Cargar nombre desde cookie al montar
   useEffect(() => {
@@ -562,36 +562,38 @@ export default function Home() {
   }, [guestName]);
 
   const loadMore = useCallback(async () => {
-    console.log('🔍 loadMore llamado:', { isLoadingMore: isLoadingMoreRef.current, hasMore: hasMoreRef.current, offset: currentOffsetRef.current });
-    
     if (isLoadingMoreRef.current || !hasMoreRef.current) return;
 
     setIsLoadingMore(true);
     isLoadingMoreRef.current = true;
 
     const offset = currentOffsetRef.current;
-    console.log('📥 Cargando fotos desde offset:', offset);
-    
     const newPhotos = await loadPhotos(20, offset);
-    console.log('✅ Fotos cargadas:', newPhotos.length);
     
     if (newPhotos.length === 0) {
-      console.log('❌ No hay más fotos, hasMore = false');
       setHasMore(false);
       hasMoreRef.current = false;
     } else {
       // Actualizar offset ANTES de insertar en el estado
       currentOffsetRef.current = offset + newPhotos.length;
-      console.log('📊 Nuevo offset:', currentOffsetRef.current);
       
-      setPhotos(prev => [...prev, ...newPhotos]);
-      // No restaurar el scroll - dejar que el navegador maneje la posición naturalmente
-      // Esto evita el "hipo" cuando el usuario está haciendo scroll hacia abajo
+      // Usar una función de actualización para evitar problemas de estado
+      setPhotos(prev => {
+        // Evitar duplicados por si acaso
+        const existingUrls = new Set(prev.map(p => p.photo_url));
+        const uniqueNewPhotos = newPhotos.filter(p => !existingUrls.has(p.photo_url));
+        return [...prev, ...uniqueNewPhotos];
+      });
     }
 
     setIsLoadingMore(false);
     isLoadingMoreRef.current = false;
   }, []);
+
+  // Guardar la función en un ref para el observer
+  useEffect(() => {
+    loadMoreRefFn.current = loadMore;
+  }, [loadMore]);
 
   useEffect(() => {
     // Esperar a que el elemento esté disponible y no estemos en carga inicial
@@ -599,29 +601,31 @@ export default function Home() {
       return;
     }
 
-    console.log('👀 IntersectionObserver creado/actualizado');
-
     // Limpiar observer anterior si existe
     if (observerRef.current) {
       observerRef.current.disconnect();
     }
 
+    // Debounce para evitar múltiples disparos
+    let timeoutId: NodeJS.Timeout | null = null;
+
     const observer = new IntersectionObserver(
       (entries) => {
-        console.log('🔔 IntersectionObserver disparado:', {
-          isIntersecting: entries[0].isIntersecting,
-          isLoadingMore: isLoadingMoreRef.current,
-          hasMore: hasMoreRef.current
-        });
+        if (!entries[0].isIntersecting) return;
+        if (isLoadingMoreRef.current || !hasMoreRef.current) return;
+
+        // Debounce: esperar 100ms antes de cargar
+        if (timeoutId) clearTimeout(timeoutId);
         
-        if (entries[0].isIntersecting && !isLoadingMoreRef.current && hasMoreRef.current) {
-          console.log('✅ Condiciones cumplidas, llamando a loadMore()');
-          loadMore();
-        }
+        timeoutId = setTimeout(() => {
+          if (!isLoadingMoreRef.current && hasMoreRef.current && loadMoreRefFn.current) {
+            loadMoreRefFn.current();
+          }
+        }, 100);
       },
       { 
         threshold: 0.1,
-        rootMargin: '300px' // Pre-carga 300px antes de llegar al trigger (reducido para evitar "hipo")
+        rootMargin: '200px' // Reducido para evitar cargas demasiado tempranas
       }
     );
 
@@ -629,19 +633,11 @@ export default function Home() {
     const element = loadMoreRef.current;
     observer.observe(element);
 
-    // Verificar si el elemento ya es visible al crear el observer
-    // (puede pasar si el usuario hace scroll rápido o hay pocas fotos)
-    const rect = element.getBoundingClientRect();
-    const isVisible = rect.top < window.innerHeight + 300; // Considerando el rootMargin
-    if (isVisible && !isLoadingMoreRef.current && hasMoreRef.current) {
-      console.log('📌 Elemento ya visible, cargando más fotos inmediatamente');
-      loadMore();
-    }
-
     return () => {
+      if (timeoutId) clearTimeout(timeoutId);
       observer.disconnect();
     };
-  }, [isInitialLoading, loadMore]); // Re-crear cuando termine la carga inicial o cambie loadMore
+  }, [isInitialLoading]); // Solo recrear cuando termine la carga inicial
 
   useEffect(() => {
     const savedName = localStorage.getItem('guestName');
@@ -699,7 +695,7 @@ export default function Home() {
     }
   };
 
-  const deleteMedia = async (photoUrl: string, videoUrl?: string, mediaType?: 'image' | 'video') => {
+  const deleteMedia = async (photoUrl: string, videoUrl?: string) => {
     const confirmed = confirm('¿Seguro que quieres eliminar este archivo?');
     if (!confirmed) return;
 
@@ -768,7 +764,6 @@ export default function Home() {
     const totalBytes = fileArray.reduce((sum, file) => sum + file.size, 0);
 
     setIsUploading(true);
-    setShouldCancel(false);
     shouldCancelRef.current = false; // Resetear ref
     setUploadError(null);
     setFailedFiles([]);
@@ -818,7 +813,6 @@ export default function Home() {
     }
 
     setIsUploading(false);
-    setShouldCancel(false);
     shouldCancelRef.current = false; // Resetear ref
   };
 
@@ -862,8 +856,7 @@ export default function Home() {
   };
 
   const confirmCancel = () => {
-    setShouldCancel(true);
-    shouldCancelRef.current = true; // Actualizar ref también
+    shouldCancelRef.current = true; // Actualizar ref
     setShowCancelModal(false);
   };
 
@@ -942,15 +935,17 @@ export default function Home() {
     setSelectedPhotoIndex(null);
   };
 
-  // Agrupar fotos por persona
-  const photosByGuest = photos.reduce((acc, photo) => {
-    const name = photo.guest_name || 'Anónimo';
-    if (!acc[name]) {
-      acc[name] = [];
-    }
-    acc[name].push(photo);
-    return acc;
-  }, {} as Record<string, PhotoData[]>);
+  // Agrupar fotos por persona (memoizado para evitar re-renders innecesarios)
+  const photosByGuest = useMemo(() => {
+    return photos.reduce((acc, photo) => {
+      const name = photo.guest_name || 'Anónimo';
+      if (!acc[name]) {
+        acc[name] = [];
+      }
+      acc[name].push(photo);
+      return acc;
+    }, {} as Record<string, PhotoData[]>);
+  }, [photos]);
 
   return (
     <>
@@ -1240,9 +1235,12 @@ export default function Home() {
                         const likes = photoLikes[item.photo_url] || 0;
                         const isFirstRow = globalIndex < 4; // Solo primeras 4 fotos tienen prioridad alta
                         
+                        // Usar photo_url como key para mejor reconciliación de React
+                        const itemKey = item.photo_url;
+                        
                         return item.media_type === 'video' && item.video_url ? (
                           <VideoInGallery
-                            key={index}
+                            key={itemKey}
                             videoUrl={item.video_url}
                             thumbnailUrl={item.photo_url}
                             index={index}
@@ -1251,7 +1249,7 @@ export default function Home() {
                           />
                         ) : (
                           <div 
-                            key={index} 
+                            key={itemKey} 
                             className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
                             onClick={() => openPhotoModal(globalIndex)}
                             style={{ containIntrinsicSize: 'auto 400px' }}
