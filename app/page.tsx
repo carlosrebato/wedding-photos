@@ -897,31 +897,32 @@ export default function Home() {
       {/* Modal de bienvenida */}
       {showModal && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-          <div 
-            className="relative max-w-md w-full p-8 sm:p-12"
-            style={{
-              backgroundImage: 'url(/assets/tarjeta-fondo.jpg)',
-              backgroundSize: 'contain',
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'center',
-              aspectRatio: '4/3'
-            }}
-          >
-            <div className="flex flex-col items-center justify-center h-full">
-              {/* Arbolito */}
+          {/* Frame transparente contenedor */}
+          <div className="relative max-w-lg w-full" style={{ aspectRatio: '1.35/1' }}>
+            {/* Tarjeta de fondo */}
+            <img 
+              src="/assets/tarjeta-fondo.jpg" 
+              alt=""
+              className="absolute inset-0 w-full h-full object-contain"
+            />
+            
+            {/* Contenido dentro de la tarjeta */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center px-12 py-10">
+              {/* Arbolito (PNG transparente) */}
               <img 
                 src="/assets/arbolito.png" 
-                alt="Arbolito"
-                className="w-16 h-16 mb-4"
+                alt=""
+                className="w-14 h-14 mb-2 object-contain"
+                style={{ filter: 'drop-shadow(0 0 0 transparent)' }}
               />
               
               {/* Título */}
-              <h2 className="text-3xl font-bold mb-4 text-center" style={{ color: '#6E0005' }}>
+              <h2 className="text-3xl font-bold mb-3 text-center" style={{ color: '#6E0005' }}>
                 ¡Hola!
               </h2>
               
               {/* Descripción */}
-              <p className="mb-6 text-center font-medium" style={{ color: '#6E0005' }}>
+              <p className="mb-6 text-center font-medium text-sm leading-relaxed" style={{ color: '#6E0005', maxWidth: '320px' }}>
                 Hemos creado esta web para que puedas subir todas tus fotos y vídeos de la boda
               </p>
         
@@ -932,17 +933,17 @@ export default function Home() {
                   name="guestName"
                   required
                   placeholder="Escribe tu nombre"
-                  className="w-full px-4 py-3 mb-4 rounded-lg text-center"
+                  className="w-full px-4 py-2.5 mb-3 rounded-lg text-center text-sm"
                   style={{ 
                     backgroundColor: 'white',
-                    border: '2px solid #D4C5BB',
+                    border: '1px solid #D4C5BB',
                     color: '#6E0005'
                   }}
                 />
         
                 <button
                   type="submit"
-                  className="w-full text-white py-3 rounded-lg font-semibold transition-opacity hover:opacity-90"
+                  className="w-full text-white py-2.5 rounded-lg font-semibold text-sm transition-opacity hover:opacity-90"
                   style={{ backgroundColor: '#364136' }}
                 >
                   Continuar
