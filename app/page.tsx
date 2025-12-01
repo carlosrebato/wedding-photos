@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import Image from 'next/image';
 import Lottie from 'lottie-react';
@@ -881,16 +881,14 @@ export default function Home() {
   };
 
   // Agrupar fotos por persona
-  const photosByGuest = useMemo(() => {
-    return photos.reduce((acc, photo) => {
-      const name = photo.guest_name || 'Anónimo';
-      if (!acc[name]) {
-        acc[name] = [];
-      }
-      acc[name].push(photo);
-      return acc;
-    }, {} as Record<string, PhotoData[]>);
-  }, [photos]);
+  const photosByGuest = photos.reduce((acc, photo) => {
+    const name = photo.guest_name || 'Anónimo';
+    if (!acc[name]) {
+      acc[name] = [];
+    }
+    acc[name].push(photo);
+    return acc;
+  }, {} as Record<string, PhotoData[]>);
 
   return (
     <>
