@@ -1161,6 +1161,7 @@ export default function Home() {
                       {items.map((item, index) => {
                         const globalIndex = photos.findIndex(p => p.photo_url === item.photo_url);
                         const likes = photoLikes[item.photo_url] || 0;
+                        const isFirstRow = globalIndex < 8; // Primeras 8 fotos tienen prioridad alta
                         
                         return item.media_type === 'video' && item.video_url ? (
                           <VideoInGallery
@@ -1184,7 +1185,8 @@ export default function Home() {
                               width="400"
                               height="400"
                               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                              loading="lazy"
+                              loading={isFirstRow ? 'eager' : 'lazy'}
+                              fetchPriority={isFirstRow ? 'high' : 'auto'}
                             />
                             
                             {likes > 0 && (
