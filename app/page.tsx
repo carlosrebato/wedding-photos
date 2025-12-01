@@ -10,7 +10,7 @@ import checkSuccessAnimation from '@/public/animations/check-success.json';
 import imageCompression from 'browser-image-compression';
 
 // ============================================
-// FUNCIONES AUXILIARES  
+// FUNCIONES AUXILIARES
 // ============================================
 
 // Gestión de cookies para el nombre del invitado
@@ -270,7 +270,7 @@ interface PhotoData {
   duration?: number;
 }
 
-async function loadPhotos(limit: number = 30, offset: number = 0): Promise<PhotoData[]> {
+async function loadPhotos(limit: number = 60, offset: number = 0): Promise<PhotoData[]> {
   try {
     const { data, error } = await supabase
       .from('uploads')
@@ -279,15 +279,14 @@ async function loadPhotos(limit: number = 30, offset: number = 0): Promise<Photo
       .range(offset, offset + limit - 1);
 
     if (error) {
-      console.error('❌ Error cargando fotos:', error);
+      console.error('Error cargando fotos:', error);
       return [];
     }
 
-    console.log(`📷 Fotos cargadas: ${data.length} (offset: ${offset})`);
     return data;
 
   } catch (error) {
-    console.error('❌ Error:', error);
+    console.error('Error:', error);
     return [];
   }
 }
@@ -309,6 +308,7 @@ function GallerySkeleton({ count = 8 }: { count?: number }) {
         <div
           key={i}
           className="aspect-square relative overflow-hidden rounded-lg bg-gray-200 animate-pulse"
+          style={{ minHeight: '200px' }}
         />
       ))}
     </>
@@ -406,27 +406,25 @@ function VideoInGallery({
       ref={containerRef}
       className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
       onClick={onClick}
+      style={{ containIntrinsicSize: 'auto 400px' }}
     >
       {shouldLoad ? (
         <video
           ref={videoRef}
-          src={`${videoUrl}#t=0,10`}
+          src={videoUrl}
           poster={thumbnailUrl}
+          width="400"
+          height="400"
           autoPlay
-          loop={false}
+          loop={true}
           muted
           playsInline
           preload="none"
           className="w-full h-full object-cover"
           onTimeUpdate={(e) => {
             const video = e.target as HTMLVideoElement;
-            
-            // Si llega a 10 segundos (o más), reiniciar
             if (video.currentTime >= 10) {
               video.currentTime = 0;
-              video.play().catch(() => {
-                // Ignorar errores de autoplay
-              });
             }
           }}
         />
@@ -434,6 +432,8 @@ function VideoInGallery({
         <img 
           src={thumbnailUrl}
           alt="Video thumbnail"
+          width="400"
+          height="400"
           className="w-full h-full object-cover"
           loading="lazy"
         />
@@ -488,6 +488,7 @@ export default function Home() {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const currentOffsetRef = useRef(0); // Track del offset real
 
   // Cargar nombre desde cookie al montar
   useEffect(() => {
@@ -559,20 +560,35 @@ export default function Home() {
     if (isLoadingMore || !hasMore) return;
 
     setIsLoadingMore(true);
-    console.log('📷 Cargando más fotos...');
 
-    const newPhotos = await loadPhotos(20, photos.length);
+    // Guardar posición actual del scroll
+    const scrollY = window.scrollY;
+    const scrollHeight = document.documentElement.scrollHeight;
+
+    const offset = currentOffsetRef.current;
+    const newPhotos = await loadPhotos(20, offset);
     
     if (newPhotos.length === 0) {
       setHasMore(false);
-      console.log('✅ No hay más fotos');
     } else {
+      // Actualizar offset ANTES de insertar en el estado
+      currentOffsetRef.current = offset + newPhotos.length;
+      
       setPhotos(prev => [...prev, ...newPhotos]);
-      console.log(`✅ ${newPhotos.length} fotos más cargadas`);
+      
+      // Restaurar posición del scroll después de insertar
+      requestAnimationFrame(() => {
+        const newScrollHeight = document.documentElement.scrollHeight;
+        const heightDiff = newScrollHeight - scrollHeight;
+        if (heightDiff > 0 && scrollY < scrollHeight - window.innerHeight - 100) {
+          // Solo ajustar si NO estamos cerca del final
+          window.scrollTo(0, scrollY);
+        }
+      });
     }
 
     setIsLoadingMore(false);
-  }, [photos.length, isLoadingMore, hasMore]);
+  }, [isLoadingMore, hasMore]);
 
   useEffect(() => {
     if (!loadMoreRef.current) return;
@@ -583,7 +599,10 @@ export default function Home() {
           loadMore();
         }
       },
-      { threshold: 0.1 }
+      { 
+        threshold: 0.1,
+        rootMargin: '1000px' // Pre-carga 1000px antes de llegar al trigger
+      }
     );
 
     observerRef.current.observe(loadMoreRef.current);
@@ -605,10 +624,11 @@ export default function Home() {
     async function fetchData() {
       setIsInitialLoading(true);
       
-      const photosData = await loadPhotos(30, 0);
+      const photosData = await loadPhotos(60, 0);
       setPhotos(photosData);
+      currentOffsetRef.current = photosData.length; // Actualizar offset inicial
       
-      if (photosData.length < 30) {
+      if (photosData.length < 60) {
         setHasMore(false);
       }
       
@@ -716,6 +736,9 @@ export default function Home() {
     const failed: File[] = [];
     let uploadedSoFar = 0; // Acumulador de bytes completados
     
+    // Yield al navegador para actualizar UI
+    await new Promise(resolve => setTimeout(resolve, 0));
+    
     for (let i = 0; i < fileArray.length; i++) {
       if (shouldCancel) {
         setUploadError('Subida cancelada');
@@ -766,8 +789,12 @@ export default function Home() {
     input.multiple = true;
     input.onchange = (e) => {
       const files = (e.target as HTMLInputElement).files;
+      console.log('🔍 Files seleccionados:', files ? files.length : 0);
       if (files && files.length > 0) {
+        console.log('✅ Llamando a handleUpload con', files.length, 'archivos');
         handleUpload(files);
+      } else {
+        console.log('❌ No hay archivos o files es null');
       }
       // Resetear el input para permitir seleccionar el mismo archivo de nuevo
       input.value = '';
@@ -870,42 +897,59 @@ export default function Home() {
       {/* Modal de bienvenida */}
       {showModal && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-          <div className="rounded-lg shadow-xl max-w-md w-full p-6 sm:p-8" style={{ backgroundColor: '#F4EAE3' }}>
-            <h2 className="text-2xl font-bold mb-4 text-center" style={{ color: '#6E0005' }}>
-              ¡Hola! 💕
-            </h2>
+          {/* Frame transparente contenedor */}
+          <div className="relative max-w-lg w-full" style={{ aspectRatio: '1.35/1' }}>
+            {/* Tarjeta de fondo */}
+            <img 
+              src="/assets/tarjeta-fondo.jpg" 
+              alt=""
+              className="absolute inset-0 w-full h-full object-contain"
+            />
             
-            <p className="mb-6 text-center" style={{ color: '#6E0005' }}>
-              Comparte tus mejores fotos de la boda. Los vídeos, ¡todos bienvenidos!
-            </p>
-      
-            <form onSubmit={handleNameSubmit}>
-              <label className="block mb-4">
-                <span className="text-sm font-medium block mb-2" style={{ color: '#6E0005' }}>
-                  Tu nombre
-                </span>
+            {/* Contenido dentro de la tarjeta */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center px-12 py-10">
+              {/* Arbolito (PNG transparente) */}
+              <img 
+                src="/assets/arbolito.png" 
+                alt=""
+                className="w-14 h-14 mb-2 object-contain"
+                style={{ filter: 'drop-shadow(0 0 0 transparent)' }}
+              />
+              
+              {/* Título */}
+              <h2 className="text-3xl font-bold mb-3 text-center" style={{ color: '#6E0005' }}>
+                ¡Hola!
+              </h2>
+              
+              {/* Descripción */}
+              <p className="mb-6 text-center font-medium text-sm leading-relaxed" style={{ color: '#6E0005', maxWidth: '320px' }}>
+                Hemos creado esta web para que puedas subir todas tus fotos y vídeos de la boda
+              </p>
+        
+              {/* Formulario */}
+              <form onSubmit={handleNameSubmit} className="w-full max-w-xs">
                 <input
                   type="text"
                   name="guestName"
                   required
-                  placeholder="Ej: María"
-                  className="w-full px-4 py-3 border rounded-lg"
+                  placeholder="Escribe tu nombre"
+                  className="w-full px-4 py-2.5 mb-3 rounded-lg text-center text-sm"
                   style={{ 
                     backgroundColor: 'white',
-                    borderColor: '#6E0005',
+                    border: '1px solid #D4C5BB',
                     color: '#6E0005'
                   }}
                 />
-              </label>
-      
-              <button
-                type="submit"
-                className="w-full text-white py-3 rounded-lg font-semibold transition-opacity hover:opacity-90"
-                style={{ backgroundColor: '#364136' }}
-              >
-                Continuar
-              </button>
-            </form>
+        
+                <button
+                  type="submit"
+                  className="w-full text-white py-2.5 rounded-lg font-semibold text-sm transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: '#364136' }}
+                >
+                  Continuar
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}
@@ -1127,13 +1171,14 @@ export default function Home() {
 
                 return (
                   <div key={name} className="mb-12">
-                    <h2 className="text-xl font-semibold mb-4 text-gray-800">
+                    <h2 className="text-xl font-semibold mb-4" style={{ color: '#6E0005' }}>
                       {name} subió {subtitle}
                     </h2>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                       {items.map((item, index) => {
                         const globalIndex = photos.findIndex(p => p.photo_url === item.photo_url);
                         const likes = photoLikes[item.photo_url] || 0;
+                        const isFirstRow = globalIndex < 4; // Solo primeras 4 fotos tienen prioridad alta
                         
                         return item.media_type === 'video' && item.video_url ? (
                           <VideoInGallery
@@ -1149,12 +1194,16 @@ export default function Home() {
                             key={index} 
                             className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
                             onClick={() => openPhotoModal(globalIndex)}
+                            style={{ containIntrinsicSize: 'auto 400px' }}
                           >
                             <img
                               src={item.photo_url}
                               alt={`Foto de ${name}`}
+                              width="400"
+                              height="400"
                               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                              loading="lazy"
+                              loading={isFirstRow ? 'eager' : 'lazy'}
+                              fetchPriority={isFirstRow ? 'high' : 'auto'}
                             />
                             
                             {likes > 0 && (
