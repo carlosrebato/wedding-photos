@@ -567,27 +567,54 @@ export default function Home() {
     setIsLoadingMore(true);
     isLoadingMoreRef.current = true;
 
-    const offset = currentOffsetRef.current;
-    const newPhotos = await loadPhotos(20, offset);
-    
-    if (newPhotos.length === 0) {
+    try {
+      const offset = currentOffsetRef.current;
+      const newPhotos = await loadPhotos(20, offset);
+      
+      if (newPhotos.length === 0) {
+        // No hay más fotos disponibles
+        setHasMore(false);
+        hasMoreRef.current = false;
+      } else {
+        // Usar una función de actualización para evitar problemas de estado
+        setPhotos(prev => {
+          // Crear un Set con todas las URLs existentes para verificación rápida
+          const existingUrls = new Set(prev.map(p => p.photo_url));
+          
+          // Filtrar solo fotos que NO existen ya
+          const uniqueNewPhotos = newPhotos.filter(p => !existingUrls.has(p.photo_url));
+          
+          if (uniqueNewPhotos.length === 0) {
+            // Si todas las fotos ya existen, puede ser que hayamos llegado al final
+            // o que haya un problema de sincronización. Actualizar offset de todas formas
+            // para evitar loops infinitos
+            currentOffsetRef.current = offset + newPhotos.length;
+            
+            // Si recibimos fotos pero todas son duplicados, puede ser que no haya más
+            if (newPhotos.length < 20) {
+              setHasMore(false);
+              hasMoreRef.current = false;
+            }
+            
+            return prev; // No cambiar el estado
+          }
+          
+          // Actualizar offset con el número de fotos recibidas (no solo las únicas)
+          // Esto asegura que no volvamos a pedir las mismas fotos
+          currentOffsetRef.current = offset + newPhotos.length;
+          
+          return [...prev, ...uniqueNewPhotos];
+        });
+      }
+    } catch (error) {
+      console.error('Error en loadMore:', error);
+      // En caso de error, marcar como sin más contenido para evitar loops
       setHasMore(false);
       hasMoreRef.current = false;
-    } else {
-      // Actualizar offset ANTES de insertar en el estado
-      currentOffsetRef.current = offset + newPhotos.length;
-      
-      // Usar una función de actualización para evitar problemas de estado
-      setPhotos(prev => {
-        // Evitar duplicados por si acaso
-        const existingUrls = new Set(prev.map(p => p.photo_url));
-        const uniqueNewPhotos = newPhotos.filter(p => !existingUrls.has(p.photo_url));
-        return [...prev, ...uniqueNewPhotos];
-      });
+    } finally {
+      setIsLoadingMore(false);
+      isLoadingMoreRef.current = false;
     }
-
-    setIsLoadingMore(false);
-    isLoadingMoreRef.current = false;
   }, []);
 
   // Guardar la función en un ref para el observer
@@ -604,38 +631,63 @@ export default function Home() {
     // Limpiar observer anterior si existe
     if (observerRef.current) {
       observerRef.current.disconnect();
+      observerRef.current = null;
     }
 
-    // Debounce para evitar múltiples disparos
+    // Debounce compartido para evitar múltiples disparos
     let timeoutId: NodeJS.Timeout | null = null;
+    let isPending = false; // Flag para evitar múltiples llamadas simultáneas
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (!entries[0].isIntersecting) return;
-        if (isLoadingMoreRef.current || !hasMoreRef.current) return;
+        const entry = entries[0];
+        if (!entry.isIntersecting) {
+          // Si sale del viewport, cancelar cualquier carga pendiente
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+          isPending = false;
+          return;
+        }
 
-        // Debounce: esperar 100ms antes de cargar
+        // Si ya está cargando o no hay más contenido, ignorar
+        if (isLoadingMoreRef.current || !hasMoreRef.current || isPending) {
+          return;
+        }
+
+        // Debounce más largo: esperar 300ms antes de cargar para evitar saltos
         if (timeoutId) clearTimeout(timeoutId);
         
+        isPending = true;
         timeoutId = setTimeout(() => {
+          isPending = false;
           if (!isLoadingMoreRef.current && hasMoreRef.current && loadMoreRefFn.current) {
             loadMoreRefFn.current();
           }
-        }, 100);
+          timeoutId = null;
+        }, 300);
       },
       { 
         threshold: 0.1,
-        rootMargin: '200px' // Reducido para evitar cargas demasiado tempranas
+        rootMargin: '100px' // Reducido aún más para evitar cargas demasiado tempranas
       }
     );
 
     observerRef.current = observer;
     const element = loadMoreRef.current;
-    observer.observe(element);
+    if (element) {
+      observer.observe(element);
+    }
 
     return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-      observer.disconnect();
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
     };
   }, [isInitialLoading]); // Solo recrear cuando termine la carga inicial
 
@@ -801,7 +853,16 @@ export default function Home() {
     }
     
     if (newPhotos.length > 0) {
-      setPhotos(prev => [...newPhotos, ...prev]);
+      setPhotos(prev => {
+        // Evitar duplicados al agregar nuevas fotos subidas
+        const existingUrls = new Set(prev.map(p => p.photo_url));
+        const uniqueNewPhotos = newPhotos.filter(p => !existingUrls.has(p.photo_url));
+        
+        // Las nuevas fotos se agregan al principio, pero el offset NO cambia
+        // porque el offset se refiere a la posición en la DB, no en el array local
+        // Las fotos nuevas están al principio y las viejas mantienen su posición relativa
+        return [...uniqueNewPhotos, ...prev];
+      });
     }
 
     if (failed.length > 0 && !shouldCancelRef.current) {
