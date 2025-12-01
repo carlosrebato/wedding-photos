@@ -411,20 +411,21 @@ function VideoInGallery({
       {shouldLoad ? (
         <video
           ref={videoRef}
-          src={`${videoUrl}#t=0,10`}
+          src={videoUrl}
           poster={thumbnailUrl}
           width="400"
           height="400"
           autoPlay
-          loop={false}
+          loop={true}
           muted
           playsInline
           preload="none"
           className="w-full h-full object-cover"
-          onEnded={(e) => {
+          onTimeUpdate={(e) => {
             const video = e.target as HTMLVideoElement;
-            video.currentTime = 0;
-            video.play().catch(() => {});
+            if (video.currentTime >= 10) {
+              video.currentTime = 0;
+            }
           }}
         />
       ) : (
