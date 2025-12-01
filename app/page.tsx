@@ -490,6 +490,10 @@ export default function Home() {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const currentOffsetRef = useRef(0); // Track del offset real
+  
+  // Refs para el IntersectionObserver
+  const isLoadingMoreRef = useRef(false);
+  const hasMoreRef = useRef(true);
 
   // Cargar nombre desde cookie al montar
   useEffect(() => {
@@ -558,11 +562,12 @@ export default function Home() {
   }, [guestName]);
 
   const loadMore = useCallback(async () => {
-    console.log('🔍 loadMore llamado:', { isLoadingMore, hasMore, offset: currentOffsetRef.current });
+    console.log('🔍 loadMore llamado:', { isLoadingMore: isLoadingMoreRef.current, hasMore: hasMoreRef.current, offset: currentOffsetRef.current });
     
-    if (isLoadingMore || !hasMore) return;
+    if (isLoadingMoreRef.current || !hasMoreRef.current) return;
 
     setIsLoadingMore(true);
+    isLoadingMoreRef.current = true;
 
     // Guardar posición actual del scroll
     const scrollY = window.scrollY;
@@ -577,6 +582,7 @@ export default function Home() {
     if (newPhotos.length === 0) {
       console.log('❌ No hay más fotos, hasMore = false');
       setHasMore(false);
+      hasMoreRef.current = false;
     } else {
       // Actualizar offset ANTES de insertar en el estado
       currentOffsetRef.current = offset + newPhotos.length;
@@ -596,7 +602,8 @@ export default function Home() {
     }
 
     setIsLoadingMore(false);
-  }, [isLoadingMore, hasMore]);
+    isLoadingMoreRef.current = false;
+  }, []);
 
   useEffect(() => {
     if (!loadMoreRef.current) {
@@ -610,11 +617,11 @@ export default function Home() {
       (entries) => {
         console.log('🔔 IntersectionObserver disparado:', {
           isIntersecting: entries[0].isIntersecting,
-          isLoadingMore,
-          hasMore
+          isLoadingMore: isLoadingMoreRef.current,
+          hasMore: hasMoreRef.current
         });
         
-        if (entries[0].isIntersecting && !isLoadingMore && hasMore) {
+        if (entries[0].isIntersecting && !isLoadingMoreRef.current && hasMoreRef.current) {
           console.log('✅ Condiciones cumplidas, llamando a loadMore()');
           loadMore();
         }
@@ -632,7 +639,7 @@ export default function Home() {
         observerRef.current.disconnect();
       }
     };
-  }, [loadMore, isLoadingMore, hasMore]);
+  }, []); // Solo crear el observer UNA VEZ al montar
 
   useEffect(() => {
     const savedName = localStorage.getItem('guestName');
@@ -644,12 +651,13 @@ export default function Home() {
     async function fetchData() {
       setIsInitialLoading(true);
       
-      const photosData = await loadPhotos(120, 0); // Aumentado de 60 a 120
+      const photosData = await loadPhotos(60, 0);
       setPhotos(photosData);
       currentOffsetRef.current = photosData.length; // Actualizar offset inicial
       
-      if (photosData.length < 120) { // Cambiar el check también
+      if (photosData.length < 60) {
         setHasMore(false);
+        hasMoreRef.current = false; // Actualizar ref
       }
       
       setIsInitialLoading(false);
