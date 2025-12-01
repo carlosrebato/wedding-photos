@@ -10,7 +10,7 @@ import checkSuccessAnimation from '@/public/animations/check-success.json';
 import imageCompression from 'browser-image-compression';
 
 // ============================================
-// FUNCIONES AUXILIARES
+// FUNCIONES AUXILIARES 
 // ============================================
 
 // Gestión de cookies para el nombre del invitado
