@@ -569,10 +569,6 @@ export default function Home() {
     setIsLoadingMore(true);
     isLoadingMoreRef.current = true;
 
-    // Guardar posición actual del scroll
-    const scrollY = window.scrollY;
-    const scrollHeight = document.documentElement.scrollHeight;
-
     const offset = currentOffsetRef.current;
     console.log('📥 Cargando fotos desde offset:', offset);
     
@@ -589,16 +585,8 @@ export default function Home() {
       console.log('📊 Nuevo offset:', currentOffsetRef.current);
       
       setPhotos(prev => [...prev, ...newPhotos]);
-      
-      // Restaurar posición del scroll después de insertar
-      requestAnimationFrame(() => {
-        const newScrollHeight = document.documentElement.scrollHeight;
-        const heightDiff = newScrollHeight - scrollHeight;
-        if (heightDiff > 0 && scrollY < scrollHeight - window.innerHeight - 100) {
-          // Solo ajustar si NO estamos cerca del final
-          window.scrollTo(0, scrollY);
-        }
-      });
+      // No restaurar el scroll - dejar que el navegador maneje la posición naturalmente
+      // Esto evita el "hipo" cuando el usuario está haciendo scroll hacia abajo
     }
 
     setIsLoadingMore(false);
@@ -633,7 +621,7 @@ export default function Home() {
       },
       { 
         threshold: 0.1,
-        rootMargin: '1000px' // Pre-carga 1000px antes de llegar al trigger
+        rootMargin: '300px' // Pre-carga 300px antes de llegar al trigger (reducido para evitar "hipo")
       }
     );
 
@@ -644,7 +632,7 @@ export default function Home() {
     // Verificar si el elemento ya es visible al crear el observer
     // (puede pasar si el usuario hace scroll rápido o hay pocas fotos)
     const rect = element.getBoundingClientRect();
-    const isVisible = rect.top < window.innerHeight + 1000; // Considerando el rootMargin
+    const isVisible = rect.top < window.innerHeight + 300; // Considerando el rootMargin
     if (isVisible && !isLoadingMoreRef.current && hasMoreRef.current) {
       console.log('📌 Elemento ya visible, cargando más fotos inmediatamente');
       loadMore();
