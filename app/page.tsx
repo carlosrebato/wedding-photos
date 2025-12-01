@@ -736,6 +736,9 @@ export default function Home() {
     const failed: File[] = [];
     let uploadedSoFar = 0; // Acumulador de bytes completados
     
+    // Yield al navegador para actualizar UI
+    await new Promise(resolve => setTimeout(resolve, 0));
+    
     for (let i = 0; i < fileArray.length; i++) {
       if (shouldCancel) {
         setUploadError('Subida cancelada');
@@ -786,8 +789,12 @@ export default function Home() {
     input.multiple = true;
     input.onchange = (e) => {
       const files = (e.target as HTMLInputElement).files;
+      console.log('🔍 Files seleccionados:', files ? files.length : 0);
       if (files && files.length > 0) {
+        console.log('✅ Llamando a handleUpload con', files.length, 'archivos');
         handleUpload(files);
+      } else {
+        console.log('❌ No hay archivos o files es null');
       }
       // Resetear el input para permitir seleccionar el mismo archivo de nuevo
       input.value = '';
