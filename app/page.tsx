@@ -308,6 +308,7 @@ function GallerySkeleton({ count = 8 }: { count?: number }) {
         <div
           key={i}
           className="aspect-square relative overflow-hidden rounded-lg bg-gray-200 animate-pulse"
+          style={{ minHeight: '200px' }}
         />
       ))}
     </>
@@ -405,12 +406,15 @@ function VideoInGallery({
       ref={containerRef}
       className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
       onClick={onClick}
+      style={{ containIntrinsicSize: 'auto 400px' }}
     >
       {shouldLoad ? (
         <video
           ref={videoRef}
           src={`${videoUrl}#t=0,10`}
           poster={thumbnailUrl}
+          width="400"
+          height="400"
           autoPlay
           loop={false}
           muted
@@ -433,6 +437,8 @@ function VideoInGallery({
         <img 
           src={thumbnailUrl}
           alt="Video thumbnail"
+          width="400"
+          height="400"
           className="w-full h-full object-cover"
           loading="lazy"
         />
@@ -1170,10 +1176,13 @@ export default function Home() {
                             key={index} 
                             className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
                             onClick={() => openPhotoModal(globalIndex)}
+                            style={{ containIntrinsicSize: 'auto 400px' }}
                           >
                             <img
                               src={item.photo_url}
                               alt={`Foto de ${name}`}
+                              width="400"
+                              height="400"
                               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                               loading="lazy"
                             />
