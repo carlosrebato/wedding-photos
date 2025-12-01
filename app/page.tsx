@@ -1161,7 +1161,7 @@ export default function Home() {
                       {items.map((item, index) => {
                         const globalIndex = photos.findIndex(p => p.photo_url === item.photo_url);
                         const likes = photoLikes[item.photo_url] || 0;
-                        const isFirstRow = globalIndex < 8; // Primeras 8 fotos tienen prioridad alta
+                        const isFirstRow = globalIndex < 4; // Solo primeras 4 fotos tienen prioridad alta
                         
                         return item.media_type === 'video' && item.video_url ? (
                           <VideoInGallery
