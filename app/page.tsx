@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import Image from 'next/image';
 import Lottie from 'lottie-react';
@@ -270,7 +270,7 @@ interface PhotoData {
   duration?: number;
 }
 
-async function loadPhotos(limit: number = 30, offset: number = 0): Promise<PhotoData[]> {
+async function loadPhotos(limit: number = 60, offset: number = 0): Promise<PhotoData[]> {
   try {
     const { data, error } = await supabase
       .from('uploads')
@@ -279,15 +279,14 @@ async function loadPhotos(limit: number = 30, offset: number = 0): Promise<Photo
       .range(offset, offset + limit - 1);
 
     if (error) {
-      console.error('❌ Error cargando fotos:', error);
+      console.error('Error cargando fotos:', error);
       return [];
     }
 
-    console.log(`📷 Fotos cargadas: ${data.length} (offset: ${offset})`);
     return data;
 
   } catch (error) {
-    console.error('❌ Error:', error);
+    console.error('Error:', error);
     return [];
   }
 }
@@ -488,6 +487,7 @@ export default function Home() {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const currentOffsetRef = useRef(0); // Track del offset real
 
   // Cargar nombre desde cookie al montar
   useEffect(() => {
@@ -559,20 +559,35 @@ export default function Home() {
     if (isLoadingMore || !hasMore) return;
 
     setIsLoadingMore(true);
-    console.log('📷 Cargando más fotos...');
 
-    const newPhotos = await loadPhotos(20, photos.length);
+    // Guardar posición actual del scroll
+    const scrollY = window.scrollY;
+    const scrollHeight = document.documentElement.scrollHeight;
+
+    const offset = currentOffsetRef.current;
+    const newPhotos = await loadPhotos(20, offset);
     
     if (newPhotos.length === 0) {
       setHasMore(false);
-      console.log('✅ No hay más fotos');
     } else {
+      // Actualizar offset ANTES de insertar en el estado
+      currentOffsetRef.current = offset + newPhotos.length;
+      
       setPhotos(prev => [...prev, ...newPhotos]);
-      console.log(`✅ ${newPhotos.length} fotos más cargadas`);
+      
+      // Restaurar posición del scroll después de insertar
+      requestAnimationFrame(() => {
+        const newScrollHeight = document.documentElement.scrollHeight;
+        const heightDiff = newScrollHeight - scrollHeight;
+        if (heightDiff > 0 && scrollY < scrollHeight - window.innerHeight - 100) {
+          // Solo ajustar si NO estamos cerca del final
+          window.scrollTo(0, scrollY);
+        }
+      });
     }
 
     setIsLoadingMore(false);
-  }, [photos.length, isLoadingMore, hasMore]);
+  }, [isLoadingMore, hasMore]);
 
   useEffect(() => {
     if (!loadMoreRef.current) return;
@@ -583,7 +598,10 @@ export default function Home() {
           loadMore();
         }
       },
-      { threshold: 0.1 }
+      { 
+        threshold: 0.1,
+        rootMargin: '1000px' // Pre-carga 1000px antes de llegar al trigger
+      }
     );
 
     observerRef.current.observe(loadMoreRef.current);
@@ -605,10 +623,11 @@ export default function Home() {
     async function fetchData() {
       setIsInitialLoading(true);
       
-      const photosData = await loadPhotos(30, 0);
+      const photosData = await loadPhotos(60, 0);
       setPhotos(photosData);
+      currentOffsetRef.current = photosData.length; // Actualizar offset inicial
       
-      if (photosData.length < 30) {
+      if (photosData.length < 60) {
         setHasMore(false);
       }
       
@@ -856,14 +875,16 @@ export default function Home() {
   };
 
   // Agrupar fotos por persona
-  const photosByGuest = photos.reduce((acc, photo) => {
-    const name = photo.guest_name || 'Anónimo';
-    if (!acc[name]) {
-      acc[name] = [];
-    }
-    acc[name].push(photo);
-    return acc;
-  }, {} as Record<string, PhotoData[]>);
+  const photosByGuest = useMemo(() => {
+    return photos.reduce((acc, photo) => {
+      const name = photo.guest_name || 'Anónimo';
+      if (!acc[name]) {
+        acc[name] = [];
+      }
+      acc[name].push(photo);
+      return acc;
+    }, {} as Record<string, PhotoData[]>);
+  }, [photos]);
 
   return (
     <>
