@@ -908,7 +908,7 @@ export default function Home() {
             
             <div className="absolute inset-0 flex items-center justify-center">
               <div
-                className="w-[88%] max-w-md h-[82%] flex flex-col items-center justify-between py-4 sm:py-6 gap-4 sm:gap-5"
+                className="w-[88%] max-w-md h-[78%] flex flex-col items-center justify-between py-3 sm:py-6 gap-3 sm:gap-5"
               >
                 <div className="flex flex-col items-center gap-2 sm:gap-3">
                   <div className="flex items-center justify-center">
@@ -920,14 +920,14 @@ export default function Home() {
                   </div>
 
                   <h2
-                    className="text-xl sm:text-3xl font-bold text-center"
+                    className="text-lg sm:text-3xl font-bold text-center"
                     style={{ color: '#6E0005' }}
                   >
                     ¡Hola!
                   </h2>
 
                   <p
-                    className="text-center font-medium text-sm sm:text-base leading-relaxed"
+                    className="text-center font-medium text-xs sm:text-base leading-relaxed"
                     style={{ color: '#6E0005', maxWidth: '360px' }}
                   >
                     Hemos creado esta web para que puedas subir todas tus fotos y vídeos de la boda
