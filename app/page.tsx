@@ -391,6 +391,18 @@ export default function Home() {
     });
   }, [selectedPhotoIndex, photos]);
 
+  useEffect(() => {
+    // Bloquear scroll del body cuando el modal de foto/vídeo está abierto
+    if (selectedPhotoIndex !== null) {
+      const previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+
+      return () => {
+        document.body.style.overflow = previousOverflow;
+      };
+    }
+  }, [selectedPhotoIndex]);
+
   const loadAllLikes = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -1023,6 +1035,7 @@ export default function Home() {
       {selectedPhotoIndex !== null && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center"
+          style={{ width: '100vw', height: '100dvh' }}
           onClick={closePhotoModal}
         >
           <div 
