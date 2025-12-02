@@ -707,7 +707,19 @@ export default function Home() {
 
     let newPhotos: PhotoData[] = [];
 
-    if (!shouldCancelRef.current) {
+    if (shouldCancelRef.current) {
+      // Versión segura: si se ha cancelado, borramos todo el batch de la tabla
+      const { error: deleteError } = await supabase
+        .from('uploads')
+        .delete()
+        .eq('upload_batch', uploadBatchId);
+
+      if (deleteError) {
+        console.error('Error borrando batch cancelado:', deleteError);
+      }
+
+      setUploadError('Subida cancelada');
+    } else {
       // Recuperar todas las filas de este batch de una sola vez
       const { data: batchRows, error } = await supabase
         .from('uploads')
@@ -719,16 +731,14 @@ export default function Home() {
         newPhotos = batchRows as PhotoData[];
         setPhotos(prev => [...newPhotos, ...prev]);
       }
-    }
 
-    if (shouldCancelRef.current) {
-      setUploadError('Subida cancelada');
-    } else if (failed.length > 0) {
-      setFailedFiles(failed);
-      setUploadError(`${failed.length} archivo(s) fallaron al subir`);
-    } else if (newPhotos.length > 0) {
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 4000);
+      if (failed.length > 0) {
+        setFailedFiles(failed);
+        setUploadError(`${failed.length} archivo(s) fallaron al subir`);
+      } else if (newPhotos.length > 0) {
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 4000);
+      }
     }
 
     setIsUploading(false);
@@ -1104,7 +1114,7 @@ export default function Home() {
         </div>
       )}
 
-      <header className="sticky top-0 z-40" style={{ backgroundColor: '#6C181F' }}>
+      <header className="sticky top-0 z-40" style={{ backgroundColor: '#F4EAE3' }}>
         <div className="flex items-center justify-center py-2 px-4">
           <div className="relative w-40 h-12">
             <Image
