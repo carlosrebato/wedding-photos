@@ -1104,7 +1104,7 @@ export default function Home() {
         </div>
       )}
 
-      <header className="sticky top-0 z-40" style={{ backgroundColor: '#F4EAE3' }}>
+      <header className="sticky top-0 z-40" style={{ backgroundColor: '#6C181F' }}>
         <div className="flex items-center justify-center py-2 px-4">
           <div className="relative w-40 h-12">
             <Image
