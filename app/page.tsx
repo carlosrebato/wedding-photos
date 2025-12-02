@@ -362,9 +362,12 @@ export default function Home() {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
-  
+
   const isLoadingMoreRef = useRef(false);
   const hasMoreRef = useRef(true);
+
+  const [hasPreloadedInitial, setHasPreloadedInitial] = useState(false);
+  const [hasLoadedFullInitial, setHasLoadedFullInitial] = useState(false);
 
   useEffect(() => {
     const savedName = getCookie('guestName');
@@ -475,37 +478,94 @@ export default function Home() {
     };
   }, [isInitialLoading, loadMore]);
 
+  // Preload reducido mientras el modal está abierto (usuario aún sin identificar)
   useEffect(() => {
-    async function fetchDataInitial(limit: number) {
-      setIsInitialLoading(true);
+    async function preloadInitial() {
+      // Si ya tenemos nombre o ya hicimos el preload, no hacemos nada
+      if (guestName || hasPreloadedInitial) return;
 
+      const isMobile = typeof window !== 'undefined' ? window.innerWidth < 768 : true;
+      const limit = isMobile ? 8 : 20;
+
+      setIsInitialLoading(true);
       const photosData = await loadInitialPhotos(limit);
       setPhotos(photosData);
+      setHasPreloadedInitial(true);
+      setIsInitialLoading(false);
 
       if (photosData.length < limit) {
+        // No hay más fotos que las del preload → ya hemos cargado todo lo que hay
+        setHasMore(false);
+        hasMoreRef.current = false;
+        setHasLoadedFullInitial(true);
+      } else {
+        setHasMore(true);
+        hasMoreRef.current = true;
+      }
+    }
+
+    // Solo hacemos preload si:
+    // - el modal está visible
+    // - NO tenemos guestName todavía
+    // - y no hemos preloaded antes
+    if (showModal && !guestName && !hasPreloadedInitial) {
+      preloadInitial();
+    }
+  }, [showModal, guestName, hasPreloadedInitial]);
+
+  // Completar la carga inicial hasta 60 elementos cuando ya conocemos el nombre del invitado
+  useEffect(() => {
+    async function loadRemainingInitial() {
+      if (!guestName || hasLoadedFullInitial) return;
+
+      const target = 60;
+      const currentCount = photos.length;
+
+      // Ya tenemos suficiente para la carga inicial
+      if (currentCount >= target) {
+        setHasLoadedFullInitial(true);
+        return;
+      }
+
+      setIsInitialLoading(true);
+
+      if (currentCount === 0) {
+        // Caso: invitado recurrente con cookie (no hubo preload)
+        const data = await loadInitialPhotos(target);
+        setPhotos(data);
+        setIsInitialLoading(false);
+        setHasLoadedFullInitial(true);
+
+        if (data.length < target) {
+          setHasMore(false);
+          hasMoreRef.current = false;
+        } else {
+          setHasMore(true);
+          hasMoreRef.current = true;
+        }
+        return;
+      }
+
+      // Caso normal: ya tenemos un preload (8/20), completamos hasta 60 añadiendo más antiguas
+      const lastPhoto = photos[photos.length - 1];
+      const remaining = target - currentCount;
+      const more = await loadMorePhotos(lastPhoto.id, remaining);
+
+      setPhotos(prev => [...prev, ...more]);
+      setIsInitialLoading(false);
+      setHasLoadedFullInitial(true);
+
+      if (more.length < remaining) {
         setHasMore(false);
         hasMoreRef.current = false;
       } else {
         setHasMore(true);
         hasMoreRef.current = true;
       }
-
-      setIsInitialLoading(false);
     }
 
-    // Si ya conocemos el nombre del invitado (cookie o recién introducido), cargamos la galería completa
-    if (guestName) {
-      fetchDataInitial(60);
-      return;
-    }
-
-    // Si aún está el modal abierto (primer acceso), hacemos un preload reducido
-    if (showModal) {
-      const isMobile = typeof window !== 'undefined' ? window.innerWidth < 768 : true;
-      const limit = isMobile ? 8 : 20;
-      fetchDataInitial(limit);
-    }
-  }, [guestName, showModal]);
+    loadRemainingInitial();
+  }, [guestName, photos.length, hasLoadedFullInitial]);
 
   useEffect(() => {
     if (guestName && photos.length > 0) {
