@@ -574,6 +574,34 @@ export default function Home() {
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
 
+    // Validaciones de cantidad de archivos y peso para evitar que el navegador reviente
+    const photos = fileArray.filter((f) => f.type.startsWith('image/'));
+    const videos = fileArray.filter((f) => f.type.startsWith('video/'));
+
+    // 1) Máximo 50 fotos si solo hay fotos
+    if (videos.length === 0 && photos.length > 50) {
+      alert('¡Eso son muchas fotos! Prueba 50 a la vez como máximo.');
+      return;
+    }
+
+    // 2) Si hay uno o más vídeos:
+    if (videos.length > 0) {
+      const totalVideoBytes = videos.reduce((sum, f) => sum + f.size, 0);
+      const totalVideoMB = totalVideoBytes / (1024 * 1024);
+
+      // 2a) Peso total de vídeo máximo 200 MB
+      if (totalVideoMB > 200) {
+        alert('El vídeo es muy pesado o muy largo, prueba con un vídeo más corto.');
+        return;
+      }
+
+      // 2b) Si hay vídeos, máximo 10 fotos acompañando
+      if (photos.length > 10) {
+        alert('Has intentado subir demasiadas cosas a la vez, prueba a separar fotos y vídeos en diferentes tandas.');
+        return;
+      }
+    }
+
     const totalBytes = fileArray.reduce((sum, file) => sum + file.size, 0);
 
     setIsUploading(true);
@@ -824,11 +852,12 @@ export default function Home() {
                   name="guestName"
                   required
                   placeholder="Escribe tu nombre"
-                  className="w-full px-4 py-2.5 mb-3 rounded-lg text-center text-sm"
-                  style={{ 
+                  className="w-full px-4 py-2.5 mb-3 rounded-lg text-center text-base"
+                  style={{
                     backgroundColor: 'white',
                     border: '1px solid #D4C5BB',
-                    color: '#6E0005'
+                    color: '#6E0005',
+                    fontSize: '16px',
                   }}
                 />
         
