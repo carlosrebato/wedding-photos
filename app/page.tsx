@@ -1019,9 +1019,6 @@ export default function Home() {
               {Object.entries(photosByGuestSegments).map(([guestName, segments]) => {
                 return (
                   <div key={guestName} className="mb-12">
-                    <h2 className="text-xl font-semibold mb-4" style={{ color: '#6E0005' }}>
-                      {guestName}
-                    </h2>
                     {segments.map((segment, batchIdx) => {
                       const photoCount = segment.items.filter(i => i.media_type === 'image').length;
                       const videoCount = segment.items.filter(i => i.media_type === 'video').length;
