@@ -586,16 +586,21 @@ export default function Home() {
 
     // 2) Si hay uno o más vídeos:
     if (videos.length > 0) {
+      // 2a) Máximo 1 vídeo por subida
+      if (videos.length > 1) {
+        alert('Solo puedes subir un vídeo por tanda. Sube ese primero y luego el siguiente.');
+        return;
+      }
       const totalVideoBytes = videos.reduce((sum, f) => sum + f.size, 0);
       const totalVideoMB = totalVideoBytes / (1024 * 1024);
 
-      // 2a) Peso total de vídeo máximo 200 MB
+      // 2b) Peso total de vídeo máximo 200 MB
       if (totalVideoMB > 200) {
         alert('El vídeo es muy pesado o muy largo, prueba con un vídeo más corto.');
         return;
       }
 
-      // 2b) Si hay vídeos, máximo 10 fotos acompañando
+      // 2c) Si hay vídeos, máximo 10 fotos acompañando
       if (photos.length > 10) {
         alert('Has intentado subir demasiadas cosas a la vez, prueba a separar fotos y vídeos en diferentes tandas.');
         return;
@@ -1078,7 +1083,13 @@ export default function Home() {
                       const videoCount = segment.items.filter(i => i.media_type === 'video').length;
                       return (
                         <div key={segment.batchId} className={batchIdx > 0 ? 'mt-8' : ''}>
-                          <div className="mb-2 text-base text-gray-700">
+                          <div
+                            className="mb-2 text-lg"
+                            style={{
+                              color: '#6E0005',
+                              fontFamily: 'DM Sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                            }}
+                          >
                             {segment.guestName} ha subido{" "}
                             {photoCount > 0 ? `${photoCount} ${photoCount === 1 ? 'foto' : 'fotos'}` : ''}
                             {photoCount > 0 && videoCount > 0 ? ' y ' : ''}
