@@ -893,72 +893,57 @@ export default function Home() {
   return (
     <>
       {showModal && (
-        <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+        <div
+          className="fixed inset-0 flex items-center justify-center p-4 z-50"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+        >
           <div
-            className="relative max-w-lg w-full"
-            style={{ aspectRatio: '1.35/1', backgroundColor: 'transparent' }}
+            className="w-full max-w-md rounded-3xl border-2 shadow-xl flex flex-col items-center px-6 py-8 gap-6"
+            style={{ backgroundColor: '#F4EBE2', borderColor: '#6C181F' }}
           >
-            <Image
-              src="/assets/tarjeta-fondo.png"
+            <img
+              src="/assets/arbolito.png"
               alt=""
-              fill
-              priority
-              className="object-contain absolute inset-0 w-full h-full"
+              className="w-16 h-16 object-contain"
             />
-            
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div
-                className="w-[88%] max-w-md h-[78%] flex flex-col items-center justify-between py-3 sm:py-6 gap-3 sm:gap-5"
+
+            <h2
+              className="text-2xl sm:text-3xl font-bold text-center"
+              style={{ color: '#6E0005' }}
+            >
+              ¡Hola!
+            </h2>
+
+            <p
+              className="text-center font-medium text-base leading-relaxed"
+              style={{ color: '#6E0005', maxWidth: '360px' }}
+            >
+              Hemos creado esta web para que puedas subir todas tus fotos y vídeos de la boda
+            </p>
+
+            <form onSubmit={handleNameSubmit} className="w-full flex flex-col gap-3">
+              <input
+                type="text"
+                name="guestName"
+                required
+                placeholder="Escribe tu nombre"
+                className="w-full px-4 py-2 rounded-lg text-center text-base"
+                style={{
+                  backgroundColor: 'white',
+                  border: '1px solid #D4C5BB',
+                  color: '#6E0005',
+                  fontSize: '16px',
+                }}
+              />
+
+              <button
+                type="submit"
+                className="w-full text-white py-3 rounded-lg font-semibold text-sm transition-opacity hover:opacity-90"
+                style={{ backgroundColor: '#364136' }}
               >
-                <div className="flex flex-col items-center gap-2 sm:gap-3">
-                  <div className="flex items-center justify-center">
-                    <img
-                      src="/assets/arbolito.png"
-                      alt=""
-                      className="w-14 h-14 sm:w-16 sm:h-16 object-contain"
-                    />
-                  </div>
-
-                  <h2
-                    className="text-lg sm:text-3xl font-bold text-center"
-                    style={{ color: '#6E0005' }}
-                  >
-                    ¡Hola!
-                  </h2>
-
-                  <p
-                    className="text-center font-medium text-xs sm:text-base leading-relaxed"
-                    style={{ color: '#6E0005', maxWidth: '360px' }}
-                  >
-                    Hemos creado esta web para que puedas subir todas tus fotos y vídeos de la boda
-                  </p>
-                </div>
-
-                <form onSubmit={handleNameSubmit} className="w-full">
-                  <input
-                    type="text"
-                    name="guestName"
-                    required
-                    placeholder="Escribe tu nombre"
-                    className="w-full px-4 py-2 mb-3 rounded-lg text-center text-base"
-                    style={{
-                      backgroundColor: 'white',
-                      border: '1px solid #D4C5BB',
-                      color: '#6E0005',
-                      fontSize: '16px',
-                    }}
-                  />
-
-                  <button
-                    type="submit"
-                    className="w-full text-white py-2.5 rounded-lg font-semibold text-sm transition-opacity hover:opacity-90"
-                    style={{ backgroundColor: '#364136' }}
-                  >
-                    Continuar
-                  </button>
-                </form>
-              </div>
-            </div>
+                Continuar
+              </button>
+            </form>
           </div>
         </div>
       )}
