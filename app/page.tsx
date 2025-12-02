@@ -297,7 +297,6 @@ function VideoInGallery({
             const video = e.currentTarget as HTMLVideoElement;
             if (video.currentTime >= 10) {
               video.currentTime = 0;
-              // ensure playback resumes immediately after resetting
               video.play().catch(() => {});
             }
           }}
@@ -312,17 +311,24 @@ function VideoInGallery({
           loading="lazy"
         />
       )}
-      {likes > 0 && (
+
+      {shouldLoad && (
+        <div className="absolute bottom-2 left-2">
+          <img
+            src="/assets/Play.png"
+            alt="Reproducir vídeo"
+            className="w-8 h-8"
+          />
+        </div>
+      )}
+
+      {shouldLoad && likes > 0 && (
         <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded-full text-sm flex items-center gap-1">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="#ef4444"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-          </svg>
+          <img
+            src="/assets/red-heart.png"
+            alt="Likes"
+            className="w-4 h-4"
+          />
           <span>{likes}</span>
         </div>
       )}
@@ -1025,13 +1031,9 @@ export default function Home() {
           >
             <button
               onClick={closePhotoModal}
-              className="absolute top-4 right-4 z-10 hover:opacity-80 transition-opacity"
+              className="absolute top-4 right-4 text-white text-4xl hover:text-gray-300 z-10"
             >
-              <img
-                src="/assets/Cruz.png"
-                alt="Cerrar"
-                className="w-8 h-8"
-              />
+              ×
             </button>
 
             {photos[selectedPhotoIndex].guest_name === guestName && (
@@ -1040,21 +1042,15 @@ export default function Home() {
                 className="absolute top-4 right-16 text-white bg-red-500 p-2 rounded-full hover:bg-red-600 z-10"
                 title="Eliminar"
               >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                </svg>
+                <img src="/assets/papelera.png" alt="Eliminar" className="w-6 h-6" />
               </button>
             )}
 
             <button
               onClick={goToPrevPhoto}
-              className="absolute left-4 z-10 hover:opacity-80 transition-opacity"
+              className="absolute left-4 text-white text-4xl hover:text-gray-300 z-10"
             >
-              <img
-                src="/assets/flecha-izquierda.png"
-                alt="Foto anterior"
-                className="w-8 h-8"
-              />
+              ‹
             </button>
 
             <div className="max-w-4xl max-h-full flex flex-col items-center gap-6">
@@ -1078,17 +1074,27 @@ export default function Home() {
                 className="flex items-center gap-3 text-white hover:scale-110 transition-transform"
               >
                 {userLikes.has(photos[selectedPhotoIndex].photo_url) ? (
-                  <img
-                    src="/assets/red-heart.png"
-                    alt="Quitar like"
-                    className="w-10 h-10"
-                  />
+                  <svg 
+                    width="40" 
+                    height="40" 
+                    viewBox="0 0 24 24" 
+                    fill="#ef4444"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                  </svg>
                 ) : (
-                  <img
-                    src="/assets/negative-red-heart.png"
-                    alt="Dar like"
-                    className="w-10 h-10"
-                  />
+                  <svg 
+                    width="40" 
+                    height="40" 
+                    viewBox="0 0 24 24" 
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="2"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                  </svg>
                 )}
                 <span className="text-2xl font-bold">
                   {photoLikes[photos[selectedPhotoIndex].photo_url] || 0}
@@ -1098,13 +1104,9 @@ export default function Home() {
 
             <button
               onClick={goToNextPhoto}
-              className="absolute right-4 z-10 hover:opacity-80 transition-opacity"
+              className="absolute right-4 text-white text-4xl hover:text-gray-300 z-10"
             >
-              <img
-                src="/assets/flecha-derecha.png"
-                alt="Foto siguiente"
-                className="w-8 h-8"
-              />
+              ›
             </button>
           </div>
         </div>
@@ -1191,15 +1193,11 @@ export default function Home() {
                                   />
                                   {likes > 0 && (
                                     <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded-full text-sm flex items-center gap-1">
-                                      <svg
-                                        width="16"
-                                        height="16"
-                                        viewBox="0 0 24 24"
-                                        fill="#ef4444"
-                                        xmlns="http://www.w3.org/2000/svg"
-                                      >
-                                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                                      </svg>
+                                      <img
+                                        src="/assets/red-heart.png"
+                                        alt="Likes"
+                                        className="w-4 h-4"
+                                      />
                                       <span>{likes}</span>
                                     </div>
                                   )}
