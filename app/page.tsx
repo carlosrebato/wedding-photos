@@ -45,13 +45,8 @@ function createPlaceholder(): Blob {
   canvas.width = 400;
   canvas.height = 400;
   const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#1f2937';
+  ctx.fillStyle = '#6C181F';
   ctx.fillRect(0, 0, 400, 400);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 100px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('▶', 200, 200);
   const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
   const byteString = atob(dataUrl.split(',')[1]);
   const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
@@ -309,17 +304,14 @@ function VideoInGallery({
         />
       ) : (
         <img
-          src={thumbnailUrl}
-          alt="Video thumbnail"
+          src="/assets/video-cargando.png"
+          alt="Cargando vídeo"
           width="400"
           height="400"
           className="w-full h-full object-cover"
           loading="lazy"
         />
       )}
-      <div className="absolute bottom-2 left-2 bg-black bg-opacity-60 rounded-full p-2">
-        <span className="text-white text-xl">▶️</span>
-      </div>
       {likes > 0 && (
         <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded-full text-sm flex items-center gap-1">
           <svg
@@ -1153,7 +1145,7 @@ export default function Home() {
                       return (
                         <div key={segment.batchId} className={batchIdx > 0 ? 'mt-8' : ''}>
                           <div
-                            className="mb-2 text-xl sm:text-2xl"
+                            className="mb-2 text-xl sm:text-3xl"
                             style={{
                               color: '#6E0005',
                               fontFamily: 'DM Sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
@@ -1249,7 +1241,7 @@ export default function Home() {
           className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50"
           style={{ filter: 'drop-shadow(0 8px 16px rgba(0, 0, 0, 0.3))' }}
         >
-          <div className="relative w-[100px] h-[100px] flex items-center justify-center">
+          <div className="relative w-[95px] h-[95px] flex items-center justify-center">
             {isUploading && (
               <svg 
                 className="absolute w-[100px] h-[100px]" 
@@ -1282,13 +1274,13 @@ export default function Home() {
             )}
 
             <div 
-              className="w-[80px] h-[80px] rounded-full flex items-center justify-center shadow-lg z-10 transition-colors duration-300"
+              className="w-[76px] h-[76px] rounded-full flex items-center justify-center shadow-lg z-10 transition-colors duration-300"
               style={{
                 backgroundColor: showSuccess ? '#10b981' : isUploading ? '#3b82f6' : '#6E0005'
               }}
             >
               {showSuccess ? (
-                <div className="w-[60px] h-[60px]">
+                <div className="w-[57px] h-[57px]">
                   <Lottie 
                     key={Date.now()}
                     animationData={checkSuccessAnimation} 
@@ -1298,7 +1290,7 @@ export default function Home() {
                   />
                 </div>
               ) : isUploading ? (
-                <div className="w-[50px] h-[50px]" style={{ filter: 'brightness(0) invert(1)' }}>
+                <div className="w-[47px] h-[47px]" style={{ filter: 'brightness(0) invert(1)' }}>
                   <Lottie 
                     animationData={uploadArrowAnimation} 
                     loop={true}
@@ -1306,7 +1298,7 @@ export default function Home() {
                   />
                 </div>
               ) : (
-                <span className="text-[45px] text-white font-bold">+</span>
+                <span className="text-[42px] text-white font-bold">+</span>
               )}
             </div>
           </div>
