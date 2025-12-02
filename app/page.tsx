@@ -527,10 +527,9 @@ export default function Home() {
         return;
       }
 
-      setIsInitialLoading(true);
-
       if (currentCount === 0) {
         // Caso: invitado recurrente con cookie (no hubo preload)
+        setIsInitialLoading(true);
         const data = await loadInitialPhotos(target);
         setPhotos(data);
         setIsInitialLoading(false);
@@ -552,7 +551,6 @@ export default function Home() {
       const more = await loadMorePhotos(lastPhoto.id, remaining);
 
       setPhotos(prev => [...prev, ...more]);
-      setIsInitialLoading(false);
       setHasLoadedFullInitial(true);
 
       if (more.length < remaining) {
