@@ -906,57 +906,56 @@ export default function Home() {
               className="object-contain absolute inset-0 w-full h-full"
             />
             
-            <div className="absolute inset-[8%] flex flex-col items-center justify-between">
-              <div className="flex flex-col items-center gap-3">
-                <div
-                  className="w-24 h-24 flex items-center justify-center"
-                  style={{ backgroundColor: 'transparent' }}
-                >
-                  <img
-                    src="/assets/arbolito.png"
-                    alt=""
-                    className="w-16 h-16 object-contain"
-                  />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-[88%] max-w-md flex flex-col items-center gap-5 sm:gap-6 py-6 sm:py-8">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="flex items-center justify-center">
+                    <img
+                      src="/assets/arbolito.png"
+                      alt=""
+                      className="w-14 h-14 sm:w-16 sm:h-16 object-contain"
+                    />
+                  </div>
+
+                  <h2
+                    className="text-2xl sm:text-3xl font-bold text-center"
+                    style={{ color: '#6E0005' }}
+                  >
+                    ¡Hola!
+                  </h2>
+
+                  <p
+                    className="text-center font-medium text-sm sm:text-base leading-relaxed"
+                    style={{ color: '#6E0005', maxWidth: '360px' }}
+                  >
+                    Hemos creado esta web para que puedas subir todas tus fotos y vídeos de la boda
+                  </p>
                 </div>
-                
-                <h2
-                  className="text-2xl sm:text-3xl font-bold text-center"
-                  style={{ color: '#6E0005' }}
-                >
-                  ¡Hola!
-                </h2>
-                
-                <p
-                  className="text-center font-medium text-sm sm:text-base leading-relaxed"
-                  style={{ color: '#6E0005', maxWidth: '360px' }}
-                >
-                  Hemos creado esta web para que puedas subir todas tus fotos y vídeos de la boda
-                </p>
+
+                <form onSubmit={handleNameSubmit} className="w-full">
+                  <input
+                    type="text"
+                    name="guestName"
+                    required
+                    placeholder="Escribe tu nombre"
+                    className="w-full px-4 py-2 mb-3 rounded-lg text-center text-base"
+                    style={{
+                      backgroundColor: 'white',
+                      border: '1px solid #D4C5BB',
+                      color: '#6E0005',
+                      fontSize: '16px',
+                    }}
+                  />
+
+                  <button
+                    type="submit"
+                    className="w-full text-white py-2.5 rounded-lg font-semibold text-sm transition-opacity hover:opacity-90"
+                    style={{ backgroundColor: '#364136' }}
+                  >
+                    Continuar
+                  </button>
+                </form>
               </div>
-      
-              <form onSubmit={handleNameSubmit} className="w-full max-w-xs">
-                <input
-                  type="text"
-                  name="guestName"
-                  required
-                  placeholder="Escribe tu nombre"
-                  className="w-full px-4 py-2 mb-3 rounded-lg text-center text-base"
-                  style={{
-                    backgroundColor: 'white',
-                    border: '1px solid #D4C5BB',
-                    color: '#6E0005',
-                    fontSize: '16px',
-                  }}
-                />
-      
-                <button
-                  type="submit"
-                  className="w-full text-white py-2.5 rounded-lg font-semibold text-sm transition-opacity hover:opacity-90"
-                  style={{ backgroundColor: '#364136' }}
-                >
-                  Continuar
-                </button>
-              </form>
             </div>
           </div>
         </div>
