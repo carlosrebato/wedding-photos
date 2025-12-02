@@ -279,13 +279,13 @@ function VideoInGallery({
       ref={containerRef}
       className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
       onClick={onClick}
-      style={{ containIntrinsicSize: 'auto 400px' }}
+      style={{ containIntrinsicSize: 'auto 400px', backgroundColor: '#6C181F' }}
     >
       {shouldLoad ? (
         <video
           ref={videoRef}
           src={videoUrl}
-          poster={thumbnailUrl}
+          poster="/assets/video-cargando.png"
           width="400"
           height="400"
           autoPlay
@@ -308,7 +308,7 @@ function VideoInGallery({
           alt="Cargando vídeo"
           width="400"
           height="400"
-          className="w-full h-full object-cover"
+          className="w-full h-full object-contain"
           loading="lazy"
         />
       )}
