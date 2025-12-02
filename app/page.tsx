@@ -895,7 +895,7 @@ export default function Home() {
       {showModal && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
           <div
-            className="relative max-w-lg w-full shadow-[0_18px_40px_rgba(0,0,0,0.45)] rounded-2xl"
+            className="relative max-w-lg w-full"
             style={{ aspectRatio: '1.35/1', backgroundColor: 'transparent' }}
           >
             <Image
@@ -906,32 +906,34 @@ export default function Home() {
               className="object-contain absolute inset-0 w-full h-full"
             />
             
-            <div className="absolute inset-0 flex flex-col items-center justify-center px-12 py-10">
-              <div
-                className="w-16 h-16 mb-3 flex items-center justify-center"
-                style={{ backgroundColor: 'transparent' }}
-              >
-                <img
-                  src="/assets/arbolito.png"
-                  alt=""
-                  className="w-12 h-12 object-contain"
-                />
+            <div className="absolute inset-[8%] flex flex-col items-center justify-between">
+              <div className="flex flex-col items-center gap-3">
+                <div
+                  className="w-24 h-24 flex items-center justify-center"
+                  style={{ backgroundColor: 'transparent' }}
+                >
+                  <img
+                    src="/assets/arbolito.png"
+                    alt=""
+                    className="w-16 h-16 object-contain"
+                  />
+                </div>
+                
+                <h2
+                  className="text-2xl sm:text-3xl font-bold text-center"
+                  style={{ color: '#6E0005' }}
+                >
+                  ¡Hola!
+                </h2>
+                
+                <p
+                  className="text-center font-medium text-sm sm:text-base leading-relaxed"
+                  style={{ color: '#6E0005', maxWidth: '360px' }}
+                >
+                  Hemos creado esta web para que puedas subir todas tus fotos y vídeos de la boda
+                </p>
               </div>
-              
-              <h2
-                className="text-2xl sm:text-3xl font-bold mb-2 text-center"
-                style={{ color: '#6E0005' }}
-              >
-                ¡Hola!
-              </h2>
-              
-              <p
-                className="mb-5 text-center font-medium text-sm sm:text-base leading-relaxed"
-                style={{ color: '#6E0005', maxWidth: '360px' }}
-              >
-                Hemos creado esta web para que puedas subir todas tus fotos y vídeos de la boda
-              </p>
-        
+      
               <form onSubmit={handleNameSubmit} className="w-full max-w-xs">
                 <input
                   type="text"
@@ -946,7 +948,7 @@ export default function Home() {
                     fontSize: '16px',
                   }}
                 />
-        
+      
                 <button
                   type="submit"
                   className="w-full text-white py-2.5 rounded-lg font-semibold text-sm transition-opacity hover:opacity-90"
