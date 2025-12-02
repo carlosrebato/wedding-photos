@@ -894,7 +894,10 @@ export default function Home() {
     <>
       {showModal && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-          <div className="relative max-w-lg w-full" style={{ aspectRatio: '1.35/1' }}>
+          <div
+            className="relative max-w-lg w-full shadow-[0_18px_40px_rgba(0,0,0,0.45)] rounded-2xl"
+            style={{ aspectRatio: '1.35/1', backgroundColor: 'transparent' }}
+          >
             <Image
               src="/assets/tarjeta-fondo.jpg"
               alt=""
@@ -904,18 +907,28 @@ export default function Home() {
             />
             
             <div className="absolute inset-0 flex flex-col items-center justify-center px-12 py-10">
-              <img 
-                src="/assets/arbolito.png" 
-                alt=""
-                className="w-14 h-14 mb-2 object-contain"
-                style={{ filter: 'drop-shadow(0 0 0 transparent)' }}
-              />
+              <div
+                className="w-16 h-16 mb-3 flex items-center justify-center"
+                style={{ backgroundColor: 'transparent' }}
+              >
+                <img
+                  src="/assets/arbolito.png"
+                  alt=""
+                  className="w-12 h-12 object-contain"
+                />
+              </div>
               
-              <h2 className="text-3xl font-bold mb-3 text-center" style={{ color: '#6E0005' }}>
+              <h2
+                className="text-2xl sm:text-3xl font-bold mb-2 text-center"
+                style={{ color: '#6E0005' }}
+              >
                 ¡Hola!
               </h2>
               
-              <p className="mb-6 text-center font-medium text-sm leading-relaxed" style={{ color: '#6E0005', maxWidth: '320px' }}>
+              <p
+                className="mb-5 text-center font-medium text-sm sm:text-base leading-relaxed"
+                style={{ color: '#6E0005', maxWidth: '360px' }}
+              >
                 Hemos creado esta web para que puedas subir todas tus fotos y vídeos de la boda
               </p>
         
@@ -925,7 +938,7 @@ export default function Home() {
                   name="guestName"
                   required
                   placeholder="Escribe tu nombre"
-                  className="w-full px-4 py-2.5 mb-3 rounded-lg text-center text-base"
+                  className="w-full px-4 py-2 mb-3 rounded-lg text-center text-base"
                   style={{
                     backgroundColor: 'white',
                     border: '1px solid #D4C5BB',
