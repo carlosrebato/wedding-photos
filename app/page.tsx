@@ -1153,7 +1153,7 @@ export default function Home() {
                       return (
                         <div key={segment.batchId} className={batchIdx > 0 ? 'mt-8' : ''}>
                           <div
-                            className="mb-2 text-lg"
+                            className="mb-2 text-xl sm:text-2xl"
                             style={{
                               color: '#6E0005',
                               fontFamily: 'DM Sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
@@ -1249,10 +1249,10 @@ export default function Home() {
           className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50"
           style={{ filter: 'drop-shadow(0 8px 16px rgba(0, 0, 0, 0.3))' }}
         >
-          <div className="relative w-[104px] h-[104px] flex items-center justify-center">
+          <div className="relative w-[100px] h-[100px] flex items-center justify-center">
             {isUploading && (
               <svg 
-                className="absolute w-[104px] h-[104px]" 
+                className="absolute w-[100px] h-[100px]" 
                 viewBox="0 0 104 104"
               >
                 <circle
@@ -1282,13 +1282,13 @@ export default function Home() {
             )}
 
             <div 
-              className="w-[84px] h-[84px] rounded-full flex items-center justify-center shadow-lg z-10 transition-colors duration-300"
+              className="w-[80px] h-[80px] rounded-full flex items-center justify-center shadow-lg z-10 transition-colors duration-300"
               style={{
                 backgroundColor: showSuccess ? '#10b981' : isUploading ? '#3b82f6' : '#6E0005'
               }}
             >
               {showSuccess ? (
-                <div className="w-[62px] h-[62px]">
+                <div className="w-[60px] h-[60px]">
                   <Lottie 
                     key={Date.now()}
                     animationData={checkSuccessAnimation} 
@@ -1298,7 +1298,7 @@ export default function Home() {
                   />
                 </div>
               ) : isUploading ? (
-                <div className="w-[52px] h-[52px]" style={{ filter: 'brightness(0) invert(1)' }}>
+                <div className="w-[50px] h-[50px]" style={{ filter: 'brightness(0) invert(1)' }}>
                   <Lottie 
                     animationData={uploadArrowAnimation} 
                     loop={true}
@@ -1306,7 +1306,7 @@ export default function Home() {
                   />
                 </div>
               ) : (
-                <span className="text-[48px] text-white font-bold">+</span>
+                <span className="text-[45px] text-white font-bold">+</span>
               )}
             </div>
           </div>
