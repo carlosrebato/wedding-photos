@@ -899,7 +899,7 @@ export default function Home() {
             style={{ aspectRatio: '1.35/1', backgroundColor: 'transparent' }}
           >
             <Image
-              src="/assets/tarjeta-fondo.jpg"
+              src="/assets/tarjeta-fondo.png"
               alt=""
               fill
               priority
