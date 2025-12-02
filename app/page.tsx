@@ -272,6 +272,8 @@ interface PhotoData {
 
 async function loadPhotos(limit: number = 60, offset: number = 0): Promise<PhotoData[]> {
   try {
+    console.log(`🔍 Supabase query: limit=${limit}, offset=${offset}, range=[${offset}, ${offset + limit - 1}]`);
+    
     const { data, error } = await supabase
       .from('uploads')
       .select('photo_url, video_url, guest_name, media_type, duration')
@@ -279,14 +281,15 @@ async function loadPhotos(limit: number = 60, offset: number = 0): Promise<Photo
       .range(offset, offset + limit - 1);
 
     if (error) {
-      console.error('Error cargando fotos:', error);
+      console.error('❌ Error cargando fotos:', error);
       return [];
     }
 
-    return data;
+    console.log(`✅ Supabase devolvió ${data?.length || 0} fotos`);
+    return data || [];
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('❌ Error en loadPhotos:', error);
     return [];
   }
 }
@@ -482,16 +485,15 @@ export default function Home() {
   const [failedFiles, setFailedFiles] = useState<File[]>([]);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [shouldCancel, setShouldCancel] = useState(false);
-  const shouldCancelRef = useRef(false); // Ref para cancelación inmediata
+  const shouldCancelRef = useRef(false);
 
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
-  const currentOffsetRef = useRef(0); // Track del offset real
+  const currentOffsetRef = useRef(0);
   
-  // Refs para el IntersectionObserver
   const isLoadingMoreRef = useRef(false);
   const hasMoreRef = useRef(true);
 
@@ -562,44 +564,75 @@ export default function Home() {
   }, [guestName]);
 
   const loadMore = useCallback(async () => {
-    if (isLoadingMoreRef.current || !hasMoreRef.current) return;
+    console.log('🔵 loadMore llamado', {
+      isLoading: isLoadingMoreRef.current,
+      hasMore: hasMoreRef.current,
+      photosLength: photos.length,
+      currentOffset: currentOffsetRef.current
+    });
 
-    setIsLoadingMore(true);
+    if (isLoadingMoreRef.current || !hasMoreRef.current) {
+      console.log('⏸️ loadMore bloqueado');
+      return;
+    }
+    
     isLoadingMoreRef.current = true;
+    setIsLoadingMore(true);
 
     const offset = currentOffsetRef.current;
+    console.log(`📥 Pidiendo fotos desde offset ${offset}`);
+    
     const newPhotos = await loadPhotos(20, offset);
+    console.log(`✅ Recibidas ${newPhotos.length} fotos`);
     
     if (newPhotos.length === 0) {
+      console.log('🛑 No hay más fotos - deteniendo scroll');
       setHasMore(false);
       hasMoreRef.current = false;
     } else {
-      currentOffsetRef.current = offset + newPhotos.length;
-      setPhotos(prev => [...prev, ...newPhotos]);
+      const newOffset = offset + newPhotos.length;
+      console.log(`➡️ Actualizando offset: ${offset} → ${newOffset}`);
+      currentOffsetRef.current = newOffset;
+      setPhotos(prev => {
+        console.log(`📊 Photos: ${prev.length} → ${prev.length + newPhotos.length}`);
+        return [...prev, ...newPhotos];
+      });
     }
 
     setIsLoadingMore(false);
     isLoadingMoreRef.current = false;
+    console.log('✅ loadMore completado');
   }, []);
 
   useEffect(() => {
     if (!loadMoreRef.current || isInitialLoading) return;
 
+    console.log('🔧 Creando IntersectionObserver');
+
     observerRef.current = new IntersectionObserver(
       (entries) => {
+        console.log('👁️ Observer trigger:', {
+          isIntersecting: entries[0].isIntersecting,
+          isLoading: isLoadingMoreRef.current,
+          hasMore: hasMoreRef.current,
+          boundingRect: entries[0].boundingClientRect.top
+        });
+        
         if (entries[0].isIntersecting && !isLoadingMoreRef.current && hasMoreRef.current) {
+          console.log('🚀 Disparando loadMore desde observer');
           loadMore();
         }
       },
       { 
         threshold: 0.1,
-        rootMargin: '400px' // Cargar 400px antes del trigger
+        rootMargin: '400px'
       }
     );
 
     observerRef.current.observe(loadMoreRef.current);
 
     return () => {
+      console.log('🧹 Limpiando observer');
       if (observerRef.current) {
         observerRef.current.disconnect();
       }
@@ -614,18 +647,23 @@ export default function Home() {
     }
 
     async function fetchData() {
+      console.log('🎬 Carga inicial comenzando...');
       setIsInitialLoading(true);
       
       const photosData = await loadPhotos(60, 0);
+      console.log(`📸 Carga inicial completada: ${photosData.length} fotos`);
+      
       setPhotos(photosData);
-      currentOffsetRef.current = photosData.length; // Actualizar offset inicial
+      currentOffsetRef.current = photosData.length;
       
       if (photosData.length < 60) {
+        console.log('⚠️ Menos de 60 fotos en carga inicial - marcando hasMore=false');
         setHasMore(false);
-        hasMoreRef.current = false; // Actualizar ref
+        hasMoreRef.current = false;
       }
       
       setIsInitialLoading(false);
+      console.log('✅ Setup inicial completado');
     }
     
     fetchData();
@@ -646,7 +684,7 @@ export default function Home() {
     if (name) {
       setGuestName(name);
       localStorage.setItem('guestName', name);
-      setCookie('guestName', name, 30); // Cookie dura 30 días
+      setCookie('guestName', name, 30);
       setShowModal(false);
     }
   };
@@ -656,9 +694,7 @@ export default function Home() {
     if (!confirmed) return;
 
     try {
-      // Extraer nombre base del archivo desde la URL
       const extractFileName = (url: string): string | null => {
-        // URLs de Supabase: https://.../storage/v1/object/public/bucket/filename.ext
         const match = url.match(/\/([^/]+\.[a-z0-9]+)(?:\?|$)/i);
         return match ? match[1] : null;
       };
@@ -666,44 +702,34 @@ export default function Home() {
       const filesToDelete: string[] = [];
 
       if (videoUrl) {
-        // ES UN VIDEO
-        // 1. Borrar thumbnail del video
         const thumbFileName = extractFileName(photoUrl);
         if (thumbFileName) {
           filesToDelete.push(thumbFileName);
         }
 
-        // 2. Borrar video completo
         const videoFileName = extractFileName(videoUrl);
         if (videoFileName) {
           await supabase.storage.from('wedding-videos').remove([videoFileName]);
         }
       } else {
-        // ES UNA FOTO
-        // Extraer el ID base del nombre (ej: thumb_1234567-abc.jpg → 1234567-abc)
         const thumbFileName = extractFileName(photoUrl);
         if (thumbFileName) {
           const baseId = thumbFileName.replace(/^(thumb_|web_|original_)/, '').replace(/\.[^.]+$/, '');
           
-          // Borrar las 3 versiones
           filesToDelete.push(`thumb_${baseId}.jpg`);
           filesToDelete.push(`web_${baseId}.jpg`);
           filesToDelete.push(`original_${baseId}.jpg`);
         }
       }
 
-      // Borrar archivos de wedding-photos
       if (filesToDelete.length > 0) {
         await supabase.storage.from('wedding-photos').remove(filesToDelete);
       }
 
-      // Borrar de DB
       await supabase.from('uploads').delete().eq('photo_url', photoUrl);
 
-      // Actualizar UI
       setPhotos(prev => prev.filter(p => p.photo_url !== photoUrl));
       
-      // Cerrar modal si está abierto
       if (selectedPhotoIndex !== null) {
         setSelectedPhotoIndex(null);
       }
@@ -716,22 +742,21 @@ export default function Home() {
   const handleUpload = async (files: FileList) => {
     const fileArray = Array.from(files);
 
-    // Calcular peso total en bytes
     const totalBytes = fileArray.reduce((sum, file) => sum + file.size, 0);
 
     setIsUploading(true);
     setShouldCancel(false);
-    shouldCancelRef.current = false; // Resetear ref
+    shouldCancelRef.current = false;
     setUploadError(null);
     setFailedFiles([]);
     setUploadProgress({ uploadedBytes: 0, totalBytes });
 
     const newPhotos: PhotoData[] = [];
     const failed: File[] = [];
-    let uploadedSoFar = 0; // Acumulador de bytes completados
+    let uploadedSoFar = 0;
     
     for (let i = 0; i < fileArray.length; i++) {
-      if (shouldCancelRef.current) { // Usar ref en vez de state
+      if (shouldCancelRef.current) {
         setUploadError('Subida cancelada');
         break;
       }
@@ -749,7 +774,6 @@ export default function Home() {
           duration: result.duration
         });
         
-        // Archivo completado, actualizar progreso
         uploadedSoFar += file.size;
         setUploadProgress({ uploadedBytes: uploadedSoFar, totalBytes });
       } else {
@@ -771,7 +795,7 @@ export default function Home() {
 
     setIsUploading(false);
     setShouldCancel(false);
-    shouldCancelRef.current = false; // Resetear ref
+    shouldCancelRef.current = false;
   };
 
   const openFileSelector = () => {
@@ -780,7 +804,6 @@ export default function Home() {
     input.accept = 'image/*,video/*';
     input.multiple = true;
     
-    // Detectar Safari iOS
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     
@@ -791,7 +814,6 @@ export default function Home() {
       if (!files || files.length === 0) {
         console.log('❌ No hay archivos');
         
-        // Si es Safari iOS y no hay archivos, probablemente fue cancelado por memoria
         if (isSafari && isIOS) {
           setTimeout(() => {
             alert('⚠️ Safari canceló la selección (probablemente por falta de memoria).\n\n' +
@@ -807,7 +829,6 @@ export default function Home() {
       console.log('✅ Llamando a handleUpload con', files.length, 'archivos');
       handleUpload(files);
       
-      // Resetear el input para permitir seleccionar el mismo archivo de nuevo
       input.value = '';
     };
     input.click();
@@ -815,7 +836,7 @@ export default function Home() {
 
   const confirmCancel = () => {
     setShouldCancel(true);
-    shouldCancelRef.current = true; // Actualizar ref también
+    shouldCancelRef.current = true;
     setShowCancelModal(false);
   };
 
@@ -894,7 +915,6 @@ export default function Home() {
     setSelectedPhotoIndex(null);
   };
 
-  // Agrupar fotos por persona
   const photosByGuest = useMemo(() => {
     return photos.reduce((acc, photo) => {
       const name = photo.guest_name || 'Anónimo';
@@ -911,18 +931,14 @@ export default function Home() {
       {/* Modal de bienvenida */}
       {showModal && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-          {/* Frame transparente contenedor */}
           <div className="relative max-w-lg w-full" style={{ aspectRatio: '1.35/1' }}>
-            {/* Tarjeta de fondo */}
             <img 
               src="/assets/tarjeta-fondo.jpg" 
               alt=""
               className="absolute inset-0 w-full h-full object-contain"
             />
             
-            {/* Contenido dentro de la tarjeta */}
             <div className="absolute inset-0 flex flex-col items-center justify-center px-12 py-10">
-              {/* Arbolito (PNG transparente) */}
               <img 
                 src="/assets/arbolito.png" 
                 alt=""
@@ -930,17 +946,14 @@ export default function Home() {
                 style={{ filter: 'drop-shadow(0 0 0 transparent)' }}
               />
               
-              {/* Título */}
               <h2 className="text-3xl font-bold mb-3 text-center" style={{ color: '#6E0005' }}>
                 ¡Hola!
               </h2>
               
-              {/* Descripción */}
               <p className="mb-6 text-center font-medium text-sm leading-relaxed" style={{ color: '#6E0005', maxWidth: '320px' }}>
                 Hemos creado esta web para que puedas subir todas tus fotos y vídeos de la boda
               </p>
         
-              {/* Formulario */}
               <form onSubmit={handleNameSubmit} className="w-full max-w-xs">
                 <input
                   type="text"
@@ -968,7 +981,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Modal de confirmación de cancelar */}
       {showCancelModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
@@ -998,7 +1010,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Modal de error */}
       {uploadError && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
@@ -1044,7 +1055,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Modal fullscreen de foto/video */}
       {selectedPhotoIndex !== null && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center"
@@ -1061,7 +1071,6 @@ export default function Home() {
               ×
             </button>
 
-            {/* Botón eliminar (solo si es del usuario actual) */}
             {photos[selectedPhotoIndex].guest_name === guestName && (
               <button
                 onClick={() => deleteMedia(photos[selectedPhotoIndex].photo_url, photos[selectedPhotoIndex].video_url)}
@@ -1140,7 +1149,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Header sticky */}
       <header className="sticky top-0 z-40" style={{ backgroundColor: '#F4EAE3' }}>
         <div className="flex items-center justify-center py-2 px-4">
           <div className="relative w-40 h-12">
@@ -1155,7 +1163,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Contenido principal */}
       <main className="min-h-screen pb-32" style={{ backgroundColor: '#F4EAE3' }}>
         <div className="max-w-6xl mx-auto px-4 py-8">
           {isInitialLoading ? (
@@ -1192,7 +1199,7 @@ export default function Home() {
                       {items.map((item, index) => {
                         const globalIndex = photos.findIndex(p => p.photo_url === item.photo_url);
                         const likes = photoLikes[item.photo_url] || 0;
-                        const isFirstRow = globalIndex < 4; // Solo primeras 4 fotos tienen prioridad alta
+                        const isFirstRow = globalIndex < 4;
                         
                         return item.media_type === 'video' && item.video_url ? (
                           <VideoInGallery
@@ -1242,7 +1249,6 @@ export default function Home() {
                 );
               })}
 
-              {/* Trigger para infinite scroll */}
               <div ref={loadMoreRef} className="h-20 flex items-center justify-center">
                 {isLoadingMore && (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 w-full">
@@ -1260,7 +1266,6 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Botón flotante */}
       {selectedPhotoIndex === null && !showModal && (
         <button
           onClick={() => {
