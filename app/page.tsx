@@ -272,8 +272,6 @@ interface PhotoData {
 
 async function loadPhotos(limit: number = 60, offset: number = 0): Promise<PhotoData[]> {
   try {
-    console.log(`🔍 Supabase query: limit=${limit}, offset=${offset}, range=[${offset}, ${offset + limit - 1}]`);
-    
     const { data, error } = await supabase
       .from('uploads')
       .select('photo_url, video_url, guest_name, media_type, duration')
@@ -285,7 +283,6 @@ async function loadPhotos(limit: number = 60, offset: number = 0): Promise<Photo
       return [];
     }
 
-    console.log(`✅ Supabase devolvió ${data?.length || 0} fotos`);
     return data || [];
 
   } catch (error) {
@@ -564,15 +561,7 @@ export default function Home() {
   }, [guestName]);
 
   const loadMore = useCallback(async () => {
-    console.log('🔵 loadMore llamado', {
-      isLoading: isLoadingMoreRef.current,
-      hasMore: hasMoreRef.current,
-      photosLength: photos.length,
-      currentOffset: currentOffsetRef.current
-    });
-
     if (isLoadingMoreRef.current || !hasMoreRef.current) {
-      console.log('⏸️ loadMore bloqueado');
       return;
     }
     
@@ -580,79 +569,38 @@ export default function Home() {
     setIsLoadingMore(true);
 
     const offset = currentOffsetRef.current;
-    console.log(`📥 Pidiendo fotos desde offset ${offset}`);
-    
     const newPhotos = await loadPhotos(20, offset);
-    console.log(`✅ Recibidas ${newPhotos.length} fotos`);
     
     if (newPhotos.length === 0) {
-      console.log('🛑 No hay más fotos - deteniendo scroll');
       setHasMore(false);
       hasMoreRef.current = false;
     } else {
-      const newOffset = offset + newPhotos.length;
-      console.log(`➡️ Actualizando offset: ${offset} → ${newOffset}`);
-      currentOffsetRef.current = newOffset;
-      setPhotos(prev => {
-        console.log(`📊 Photos: ${prev.length} → ${prev.length + newPhotos.length}`);
-        return [...prev, ...newPhotos];
-      });
-
-      // SOLUCIÓN: Verificar si el trigger sigue visible después de cargar
-      setTimeout(() => {
-        if (loadMoreRef.current && !isLoadingMoreRef.current && hasMoreRef.current) {
-          const rect = loadMoreRef.current.getBoundingClientRect();
-          const windowHeight = window.innerHeight;
-          const isStillVisible = rect.top < windowHeight + 400; // rootMargin de 400px
-
-          console.log('🔍 Check post-carga:', {
-            triggerTop: rect.top,
-            windowHeight,
-            isStillVisible
-          });
-
-          if (isStillVisible) {
-            console.log('🔄 Trigger sigue visible - disparando loadMore de nuevo');
-            loadMore();
-          }
-        }
-      }, 100);
+      currentOffsetRef.current = offset + newPhotos.length;
+      setPhotos(prev => [...prev, ...newPhotos]);
     }
 
     setIsLoadingMore(false);
     isLoadingMoreRef.current = false;
-    console.log('✅ loadMore completado');
   }, []);
 
   useEffect(() => {
     if (!loadMoreRef.current || isInitialLoading) return;
 
-    console.log('🔧 Creando IntersectionObserver');
-
     observerRef.current = new IntersectionObserver(
       (entries) => {
-        console.log('👁️ Observer trigger:', {
-          isIntersecting: entries[0].isIntersecting,
-          isLoading: isLoadingMoreRef.current,
-          hasMore: hasMoreRef.current,
-          boundingRect: entries[0].boundingClientRect.top
-        });
-        
         if (entries[0].isIntersecting && !isLoadingMoreRef.current && hasMoreRef.current) {
-          console.log('🚀 Disparando loadMore desde observer');
           loadMore();
         }
       },
       { 
         threshold: 0.1,
-        rootMargin: '400px'
+        rootMargin: '1000px' // Disparar 1000px ANTES de que sea visible
       }
     );
 
     observerRef.current.observe(loadMoreRef.current);
 
     return () => {
-      console.log('🧹 Limpiando observer');
       if (observerRef.current) {
         observerRef.current.disconnect();
       }
@@ -667,23 +615,18 @@ export default function Home() {
     }
 
     async function fetchData() {
-      console.log('🎬 Carga inicial comenzando...');
       setIsInitialLoading(true);
       
       const photosData = await loadPhotos(60, 0);
-      console.log(`📸 Carga inicial completada: ${photosData.length} fotos`);
-      
       setPhotos(photosData);
       currentOffsetRef.current = photosData.length;
       
       if (photosData.length < 60) {
-        console.log('⚠️ Menos de 60 fotos en carga inicial - marcando hasMore=false');
         setHasMore(false);
         hasMoreRef.current = false;
       }
       
       setIsInitialLoading(false);
-      console.log('✅ Setup inicial completado');
     }
     
     fetchData();
@@ -829,11 +772,8 @@ export default function Home() {
     
     input.onchange = (e) => {
       const files = (e.target as HTMLInputElement).files;
-      console.log('🔍 Files seleccionados:', files ? files.length : 0);
       
       if (!files || files.length === 0) {
-        console.log('❌ No hay archivos');
-        
         if (isSafari && isIOS) {
           setTimeout(() => {
             alert('⚠️ Safari canceló la selección (probablemente por falta de memoria).\n\n' +
@@ -846,9 +786,7 @@ export default function Home() {
         return;
       }
       
-      console.log('✅ Llamando a handleUpload con', files.length, 'archivos');
       handleUpload(files);
-      
       input.value = '';
     };
     input.click();
