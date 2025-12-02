@@ -1025,28 +1025,13 @@ export default function Home() {
                     {segments.map((segment, batchIdx) => {
                       const photoCount = segment.items.filter(i => i.media_type === 'image').length;
                       const videoCount = segment.items.filter(i => i.media_type === 'video').length;
-                      let subtitle = '';
-                      if (photoCount > 0 && videoCount > 0) {
-                        subtitle = `${photoCount} ${photoCount === 1 ? 'foto' : 'fotos'} y ${videoCount} ${videoCount === 1 ? 'vídeo' : 'vídeos'}`;
-                      } else if (photoCount > 0) {
-                        subtitle = `${photoCount} ${photoCount === 1 ? 'foto' : 'fotos'}`;
-                      } else {
-                        subtitle = `${videoCount} ${videoCount === 1 ? 'vídeo' : 'vídeos'}`;
-                      }
-                      // Show a divider between segments if more than one
                       return (
                         <div key={segment.batchId} className={batchIdx > 0 ? 'mt-8' : ''}>
-                          {segments.length > 1 && (
-                            <div className="flex items-center gap-2 mb-2">
-                              <div className="flex-1 border-t border-gray-300" />
-                              <span className="text-xs text-gray-500 px-2">
-                                Nuevo grupo de subida
-                              </span>
-                              <div className="flex-1 border-t border-gray-300" />
-                            </div>
-                          )}
                           <div className="mb-2 text-base text-gray-700">
-                            {subtitle}
+                            {segment.guestName} ha subido{" "}
+                            {photoCount > 0 ? `${photoCount} ${photoCount === 1 ? 'foto' : 'fotos'}` : ''}
+                            {photoCount > 0 && videoCount > 0 ? ' y ' : ''}
+                            {videoCount > 0 ? `${videoCount} ${videoCount === 1 ? 'vídeo' : 'vídeos'}` : ''}
                           </div>
                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                             {segment.items.map((item, index) => {
