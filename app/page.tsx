@@ -476,28 +476,36 @@ export default function Home() {
   }, [isInitialLoading, loadMore]);
 
   useEffect(() => {
-    const savedName = localStorage.getItem('guestName');
-    if (savedName) {
-      setGuestName(savedName);
-      setShowModal(false);
-    }
-
-    async function fetchData() {
+    async function fetchDataInitial(limit: number) {
       setIsInitialLoading(true);
-      
-      const photosData = await loadInitialPhotos(60);
+
+      const photosData = await loadInitialPhotos(limit);
       setPhotos(photosData);
-      
-      if (photosData.length < 60) {
+
+      if (photosData.length < limit) {
         setHasMore(false);
         hasMoreRef.current = false;
+      } else {
+        setHasMore(true);
+        hasMoreRef.current = true;
       }
-      
+
       setIsInitialLoading(false);
     }
-    
-    fetchData();
-  }, []);
+
+    // Si ya conocemos el nombre del invitado (cookie o recién introducido), cargamos la galería completa
+    if (guestName) {
+      fetchDataInitial(60);
+      return;
+    }
+
+    // Si aún está el modal abierto (primer acceso), hacemos un preload reducido
+    if (showModal) {
+      const isMobile = typeof window !== 'undefined' ? window.innerWidth < 768 : true;
+      const limit = isMobile ? 8 : 20;
+      fetchDataInitial(limit);
+    }
+  }, [guestName, showModal]);
 
   useEffect(() => {
     if (guestName && photos.length > 0) {
@@ -829,10 +837,12 @@ export default function Home() {
       {showModal && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
           <div className="relative max-w-lg w-full" style={{ aspectRatio: '1.35/1' }}>
-            <img 
-              src="/assets/tarjeta-fondo.jpg" 
+            <Image
+              src="/assets/tarjeta-fondo.jpg"
               alt=""
-              className="absolute inset-0 w-full h-full object-contain"
+              fill
+              priority
+              className="object-contain absolute inset-0 w-full h-full"
             />
             
             <div className="absolute inset-0 flex flex-col items-center justify-center px-12 py-10">
@@ -1088,6 +1098,7 @@ export default function Home() {
                             style={{
                               color: '#6E0005',
                               fontFamily: 'DM Sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                              fontWeight: '700',
                             }}
                           >
                             {segment.guestName} ha subido{" "}
