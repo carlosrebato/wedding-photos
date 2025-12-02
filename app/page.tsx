@@ -108,7 +108,7 @@ async function uploadFile(
       let duration = 0;
       try {
         duration = await getVideoDuration(file);
-      } catch {
+      } catch (error) {
         // Continuar sin duración si falla
       }
 
@@ -481,6 +481,7 @@ export default function Home() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [failedFiles, setFailedFiles] = useState<File[]>([]);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [shouldCancel, setShouldCancel] = useState(false);
   const shouldCancelRef = useRef(false); // Ref para cancelación inmediata
 
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -493,7 +494,6 @@ export default function Home() {
   // Refs para el IntersectionObserver
   const isLoadingMoreRef = useRef(false);
   const hasMoreRef = useRef(true);
-  const loadMoreRefFn = useRef<(() => Promise<void>) | undefined>(undefined);
 
   // Cargar nombre desde cookie al montar
   useEffect(() => {
@@ -567,129 +567,44 @@ export default function Home() {
     setIsLoadingMore(true);
     isLoadingMoreRef.current = true;
 
-    try {
-      const offset = currentOffsetRef.current;
-      const newPhotos = await loadPhotos(20, offset);
-      
-      if (newPhotos.length === 0) {
-        // No hay más fotos disponibles
-        setHasMore(false);
-        hasMoreRef.current = false;
-      } else {
-        // Usar una función de actualización para evitar problemas de estado
-        setPhotos(prev => {
-          // Crear un Set con todas las URLs existentes para verificación rápida
-          const existingUrls = new Set(prev.map(p => p.photo_url));
-          
-          // Filtrar solo fotos que NO existen ya
-          const uniqueNewPhotos = newPhotos.filter(p => !existingUrls.has(p.photo_url));
-          
-          if (uniqueNewPhotos.length === 0) {
-            // Si todas las fotos ya existen, puede ser que hayamos llegado al final
-            // o que haya un problema de sincronización. Actualizar offset de todas formas
-            // para evitar loops infinitos
-            currentOffsetRef.current = offset + newPhotos.length;
-            
-            // Si recibimos fotos pero todas son duplicados, puede ser que no haya más
-            if (newPhotos.length < 20) {
-              setHasMore(false);
-              hasMoreRef.current = false;
-            }
-            
-            return prev; // No cambiar el estado
-          }
-          
-          // Actualizar offset con el número de fotos recibidas (no solo las únicas)
-          // Esto asegura que no volvamos a pedir las mismas fotos
-          currentOffsetRef.current = offset + newPhotos.length;
-          
-          return [...prev, ...uniqueNewPhotos];
-        });
-      }
-    } catch (error) {
-      console.error('Error en loadMore:', error);
-      // En caso de error, marcar como sin más contenido para evitar loops
+    const offset = currentOffsetRef.current;
+    const newPhotos = await loadPhotos(20, offset);
+    
+    if (newPhotos.length === 0) {
       setHasMore(false);
       hasMoreRef.current = false;
-    } finally {
-      setIsLoadingMore(false);
-      isLoadingMoreRef.current = false;
+    } else {
+      currentOffsetRef.current = offset + newPhotos.length;
+      setPhotos(prev => [...prev, ...newPhotos]);
     }
+
+    setIsLoadingMore(false);
+    isLoadingMoreRef.current = false;
   }, []);
 
-  // Guardar la función en un ref para el observer
   useEffect(() => {
-    loadMoreRefFn.current = loadMore;
-  }, [loadMore]);
+    if (!loadMoreRef.current || isInitialLoading) return;
 
-  useEffect(() => {
-    // Esperar a que el elemento esté disponible y no estemos en carga inicial
-    if (!loadMoreRef.current || isInitialLoading) {
-      return;
-    }
-
-    // Limpiar observer anterior si existe
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-      observerRef.current = null;
-    }
-
-    // Debounce compartido para evitar múltiples disparos
-    let timeoutId: NodeJS.Timeout | null = null;
-    let isPending = false; // Flag para evitar múltiples llamadas simultáneas
-
-    const observer = new IntersectionObserver(
+    observerRef.current = new IntersectionObserver(
       (entries) => {
-        const entry = entries[0];
-        if (!entry.isIntersecting) {
-          // Si sale del viewport, cancelar cualquier carga pendiente
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-            timeoutId = null;
-          }
-          isPending = false;
-          return;
+        if (entries[0].isIntersecting && !isLoadingMoreRef.current && hasMoreRef.current) {
+          loadMore();
         }
-
-        // Si ya está cargando o no hay más contenido, ignorar
-        if (isLoadingMoreRef.current || !hasMoreRef.current || isPending) {
-          return;
-        }
-
-        // Debounce más largo: esperar 300ms antes de cargar para evitar saltos
-        if (timeoutId) clearTimeout(timeoutId);
-        
-        isPending = true;
-        timeoutId = setTimeout(() => {
-          isPending = false;
-          if (!isLoadingMoreRef.current && hasMoreRef.current && loadMoreRefFn.current) {
-            loadMoreRefFn.current();
-          }
-          timeoutId = null;
-        }, 300);
       },
       { 
         threshold: 0.1,
-        rootMargin: '100px' // Reducido aún más para evitar cargas demasiado tempranas
+        rootMargin: '400px' // Cargar 400px antes del trigger
       }
     );
 
-    observerRef.current = observer;
-    const element = loadMoreRef.current;
-    if (element) {
-      observer.observe(element);
-    }
+    observerRef.current.observe(loadMoreRef.current);
 
     return () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
       if (observerRef.current) {
         observerRef.current.disconnect();
-        observerRef.current = null;
       }
     };
-  }, [isInitialLoading]); // Solo recrear cuando termine la carga inicial
+  }, [isInitialLoading, loadMore]);
 
   useEffect(() => {
     const savedName = localStorage.getItem('guestName');
@@ -708,8 +623,6 @@ export default function Home() {
       if (photosData.length < 60) {
         setHasMore(false);
         hasMoreRef.current = false; // Actualizar ref
-      } else {
-        hasMoreRef.current = true; // Asegurar que esté en true si hay más
       }
       
       setIsInitialLoading(false);
@@ -723,15 +636,6 @@ export default function Home() {
       loadAllLikes();
     }
   }, [guestName, photos.length, loadAllLikes]);
-
-  // Sincronizar refs con estados
-  useEffect(() => {
-    hasMoreRef.current = hasMore;
-  }, [hasMore]);
-
-  useEffect(() => {
-    isLoadingMoreRef.current = isLoadingMore;
-  }, [isLoadingMore]);
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -747,7 +651,7 @@ export default function Home() {
     }
   };
 
-  const deleteMedia = async (photoUrl: string, videoUrl?: string) => {
+  const deleteMedia = async (photoUrl: string, videoUrl?: string, mediaType?: 'image' | 'video') => {
     const confirmed = confirm('¿Seguro que quieres eliminar este archivo?');
     if (!confirmed) return;
 
@@ -816,6 +720,7 @@ export default function Home() {
     const totalBytes = fileArray.reduce((sum, file) => sum + file.size, 0);
 
     setIsUploading(true);
+    setShouldCancel(false);
     shouldCancelRef.current = false; // Resetear ref
     setUploadError(null);
     setFailedFiles([]);
@@ -853,16 +758,7 @@ export default function Home() {
     }
     
     if (newPhotos.length > 0) {
-      setPhotos(prev => {
-        // Evitar duplicados al agregar nuevas fotos subidas
-        const existingUrls = new Set(prev.map(p => p.photo_url));
-        const uniqueNewPhotos = newPhotos.filter(p => !existingUrls.has(p.photo_url));
-        
-        // Las nuevas fotos se agregan al principio, pero el offset NO cambia
-        // porque el offset se refiere a la posición en la DB, no en el array local
-        // Las fotos nuevas están al principio y las viejas mantienen su posición relativa
-        return [...uniqueNewPhotos, ...prev];
-      });
+      setPhotos(prev => [...newPhotos, ...prev]);
     }
 
     if (failed.length > 0 && !shouldCancelRef.current) {
@@ -874,6 +770,7 @@ export default function Home() {
     }
 
     setIsUploading(false);
+    setShouldCancel(false);
     shouldCancelRef.current = false; // Resetear ref
   };
 
@@ -917,7 +814,8 @@ export default function Home() {
   };
 
   const confirmCancel = () => {
-    shouldCancelRef.current = true; // Actualizar ref
+    setShouldCancel(true);
+    shouldCancelRef.current = true; // Actualizar ref también
     setShowCancelModal(false);
   };
 
@@ -996,7 +894,7 @@ export default function Home() {
     setSelectedPhotoIndex(null);
   };
 
-  // Agrupar fotos por persona (memoizado para evitar re-renders innecesarios)
+  // Agrupar fotos por persona
   const photosByGuest = useMemo(() => {
     return photos.reduce((acc, photo) => {
       const name = photo.guest_name || 'Anónimo';
@@ -1296,12 +1194,9 @@ export default function Home() {
                         const likes = photoLikes[item.photo_url] || 0;
                         const isFirstRow = globalIndex < 4; // Solo primeras 4 fotos tienen prioridad alta
                         
-                        // Usar photo_url como key para mejor reconciliación de React
-                        const itemKey = item.photo_url;
-                        
                         return item.media_type === 'video' && item.video_url ? (
                           <VideoInGallery
-                            key={itemKey}
+                            key={index}
                             videoUrl={item.video_url}
                             thumbnailUrl={item.photo_url}
                             index={index}
@@ -1310,7 +1205,7 @@ export default function Home() {
                           />
                         ) : (
                           <div 
-                            key={itemKey} 
+                            key={index} 
                             className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
                             onClick={() => openPhotoModal(globalIndex)}
                             style={{ containIntrinsicSize: 'auto 400px' }}
