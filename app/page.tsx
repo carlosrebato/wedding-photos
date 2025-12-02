@@ -597,6 +597,26 @@ export default function Home() {
         console.log(`📊 Photos: ${prev.length} → ${prev.length + newPhotos.length}`);
         return [...prev, ...newPhotos];
       });
+
+      // SOLUCIÓN: Verificar si el trigger sigue visible después de cargar
+      setTimeout(() => {
+        if (loadMoreRef.current && !isLoadingMoreRef.current && hasMoreRef.current) {
+          const rect = loadMoreRef.current.getBoundingClientRect();
+          const windowHeight = window.innerHeight;
+          const isStillVisible = rect.top < windowHeight + 400; // rootMargin de 400px
+
+          console.log('🔍 Check post-carga:', {
+            triggerTop: rect.top,
+            windowHeight,
+            isStillVisible
+          });
+
+          if (isStillVisible) {
+            console.log('🔄 Trigger sigue visible - disparando loadMore de nuevo');
+            loadMore();
+          }
+        }
+      }, 100);
     }
 
     setIsLoadingMore(false);
