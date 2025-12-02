@@ -904,7 +904,7 @@ export default function Home() {
             <img
               src="/assets/arbolito.png"
               alt=""
-              className="w-20 h-20 object-contain"
+              className="w-30 h-30 object-contain"
             />
 
             <h2
