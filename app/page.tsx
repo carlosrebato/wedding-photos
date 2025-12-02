@@ -392,13 +392,17 @@ export default function Home() {
   }, [selectedPhotoIndex, photos]);
 
   useEffect(() => {
-    // Bloquear scroll del body cuando el modal de foto/vídeo está abierto
+    // Bloquear scroll de fondo cuando el modal de foto/vídeo está abierto (body + html)
     if (selectedPhotoIndex !== null) {
-      const previousOverflow = document.body.style.overflow;
+      const previousBodyOverflow = document.body.style.overflow;
+      const previousHtmlOverflow = document.documentElement.style.overflow;
+
       document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
 
       return () => {
-        document.body.style.overflow = previousOverflow;
+        document.body.style.overflow = previousBodyOverflow;
+        document.documentElement.style.overflow = previousHtmlOverflow;
       };
     }
   }, [selectedPhotoIndex]);
@@ -1034,12 +1038,11 @@ export default function Home() {
 
       {selectedPhotoIndex !== null && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center"
-          style={{ width: '100vw', height: '100dvh' }}
+          className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center overscroll-none"
           onClick={closePhotoModal}
         >
           <div 
-            className="relative w-full h-full flex items-center justify-center p-4"
+            className="relative w-full h-full flex items-center justify-center p-4 overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <button
