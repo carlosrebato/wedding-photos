@@ -263,6 +263,7 @@ async function uploadFile(
 }
 
 interface PhotoData {
+  id: number;
   photo_url: string;
   video_url?: string;
   guest_name: string | null;
@@ -270,23 +271,47 @@ interface PhotoData {
   duration?: number;
 }
 
-async function loadPhotos(limit: number = 60, offset: number = 0): Promise<PhotoData[]> {
+// Carga inicial de fotos (sin cursor)
+async function loadInitialPhotos(limit: number = 60): Promise<PhotoData[]> {
   try {
     const { data, error } = await supabase
       .from('uploads')
-      .select('photo_url, video_url, guest_name, media_type, duration')
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .select('id, photo_url, video_url, guest_name, media_type, duration')
+      .order('id', { ascending: false })
+      .limit(limit);
 
     if (error) {
-      console.error('❌ Error cargando fotos:', error);
+      console.error('❌ Error cargando fotos iniciales:', error);
       return [];
     }
 
     return data || [];
 
   } catch (error) {
-    console.error('❌ Error en loadPhotos:', error);
+    console.error('❌ Error en loadInitialPhotos:', error);
+    return [];
+  }
+}
+
+// Carga incremental usando cursor (ID de la última foto)
+async function loadMorePhotos(lastId: number, limit: number = 20): Promise<PhotoData[]> {
+  try {
+    const { data, error } = await supabase
+      .from('uploads')
+      .select('id, photo_url, video_url, guest_name, media_type, duration')
+      .order('id', { ascending: false })
+      .lt('id', lastId) // Fotos con ID menor que la última
+      .limit(limit);
+
+    if (error) {
+      console.error('❌ Error cargando más fotos:', error);
+      return [];
+    }
+
+    return data || [];
+
+  } catch (error) {
+    console.error('❌ Error en loadMorePhotos:', error);
     return [];
   }
 }
@@ -374,7 +399,6 @@ function VideoInGallery({
       (entries) => {
         entries.forEach(entry => {
           if (entry.isIntersecting) {
-            // Delay progresivo según posición
             setTimeout(() => {
               setShouldLoad(true);
               videoRef.current?.play().catch(() => {
@@ -382,7 +406,6 @@ function VideoInGallery({
               });
             }, index * 200);
           } else {
-            // Salió del viewport: limpiar
             setShouldLoad(false);
             if (videoRef.current) {
               videoRef.current.pause();
@@ -439,12 +462,10 @@ function VideoInGallery({
         />
       )}
       
-      {/* Icono play */}
       <div className="absolute bottom-2 left-2 bg-black bg-opacity-60 rounded-full p-2">
         <span className="text-white text-xl">▶️</span>
       </div>
       
-      {/* Likes */}
       {likes > 0 && (
         <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded-full text-sm flex items-center gap-1">
           <svg 
@@ -489,12 +510,10 @@ export default function Home() {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
-  const currentOffsetRef = useRef(0);
   
   const isLoadingMoreRef = useRef(false);
   const hasMoreRef = useRef(true);
 
-  // Cargar nombre desde cookie al montar
   useEffect(() => {
     const savedName = getCookie('guestName');
     if (savedName) {
@@ -553,35 +572,32 @@ export default function Home() {
 
       setPhotoLikes(likesCount);
       setUserLikes(userLikesSet);
-
-      console.log('❤️ Likes cargados:', Object.keys(likesCount).length, 'fotos con likes');
     } catch (error) {
       console.error('❌ Error:', error);
     }
   }, [guestName]);
 
   const loadMore = useCallback(async () => {
-    if (isLoadingMoreRef.current || !hasMoreRef.current) {
+    if (isLoadingMoreRef.current || !hasMoreRef.current || photos.length === 0) {
       return;
     }
     
     isLoadingMoreRef.current = true;
     setIsLoadingMore(true);
 
-    const offset = currentOffsetRef.current;
-    const newPhotos = await loadPhotos(20, offset);
+    const lastPhoto = photos[photos.length - 1];
+    const newPhotos = await loadMorePhotos(lastPhoto.id, 20);
     
     if (newPhotos.length === 0) {
       setHasMore(false);
       hasMoreRef.current = false;
     } else {
-      currentOffsetRef.current = offset + newPhotos.length;
       setPhotos(prev => [...prev, ...newPhotos]);
     }
 
     setIsLoadingMore(false);
     isLoadingMoreRef.current = false;
-  }, []);
+  }, [photos]);
 
   useEffect(() => {
     if (!loadMoreRef.current || isInitialLoading) return;
@@ -594,7 +610,7 @@ export default function Home() {
       },
       { 
         threshold: 0.1,
-        rootMargin: '1000px' // Disparar 1000px ANTES de que sea visible
+        rootMargin: '1000px'
       }
     );
 
@@ -617,9 +633,8 @@ export default function Home() {
     async function fetchData() {
       setIsInitialLoading(true);
       
-      const photosData = await loadPhotos(60, 0);
+      const photosData = await loadInitialPhotos(60);
       setPhotos(photosData);
-      currentOffsetRef.current = photosData.length;
       
       if (photosData.length < 60) {
         setHasMore(false);
@@ -729,13 +744,11 @@ export default function Home() {
       const result = await uploadFile(file, guestName, setUploadError);
       
       if (result) {
-        newPhotos.push({ 
-          photo_url: result.url, 
-          video_url: result.videoUrl,
-          guest_name: guestName,
-          media_type: result.mediaType,
-          duration: result.duration
-        });
+        // Recargar las fotos más recientes para obtener el ID correcto
+        const recentPhotos = await loadInitialPhotos(1);
+        if (recentPhotos.length > 0) {
+          newPhotos.push(recentPhotos[0]);
+        }
         
         uploadedSoFar += file.size;
         setUploadProgress({ uploadedBytes: uploadedSoFar, totalBytes });
@@ -886,7 +899,6 @@ export default function Home() {
 
   return (
     <>
-      {/* Modal de bienvenida */}
       {showModal && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
           <div className="relative max-w-lg w-full" style={{ aspectRatio: '1.35/1' }}>
@@ -1155,13 +1167,13 @@ export default function Home() {
                     </h2>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                       {items.map((item, index) => {
-                        const globalIndex = photos.findIndex(p => p.photo_url === item.photo_url);
+                        const globalIndex = photos.findIndex(p => p.id === item.id);
                         const likes = photoLikes[item.photo_url] || 0;
                         const isFirstRow = globalIndex < 4;
                         
                         return item.media_type === 'video' && item.video_url ? (
                           <VideoInGallery
-                            key={index}
+                            key={item.id}
                             videoUrl={item.video_url}
                             thumbnailUrl={item.photo_url}
                             index={index}
@@ -1170,7 +1182,7 @@ export default function Home() {
                           />
                         ) : (
                           <div 
-                            key={index} 
+                            key={item.id}
                             className="aspect-square relative overflow-hidden rounded-lg shadow-md cursor-pointer group"
                             onClick={() => openPhotoModal(globalIndex)}
                             style={{ containIntrinsicSize: 'auto 400px' }}
