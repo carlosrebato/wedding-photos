@@ -569,10 +569,13 @@ export default function Home() {
     }
   };
 
-  // Upload handler with upload_batch support and segment grouping
+  // Upload handler with batch support, parallel uploads (concurrency=3), progress, and single batch fetch
   const handleUpload = async (files: FileList) => {
     const fileArray = Array.from(files);
+    if (fileArray.length === 0) return;
+
     const totalBytes = fileArray.reduce((sum, file) => sum + file.size, 0);
+
     setIsUploading(true);
     setShouldCancel(false);
     shouldCancelRef.current = false;
@@ -580,46 +583,67 @@ export default function Home() {
     setFailedFiles([]);
     setUploadProgress({ uploadedBytes: 0, totalBytes });
 
-    // Generate a unique batch id for this upload session
+    // ID único para este batch de subida
     const uploadBatchId = `batch_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-    const newPhotos: PhotoData[] = [];
+
     const failed: File[] = [];
     let uploadedSoFar = 0;
 
-    for (let i = 0; i < fileArray.length; i++) {
-      if (shouldCancelRef.current) {
-        setUploadError('Subida cancelada');
-        break;
-      }
-      const file = fileArray[i];
+    // Helper para subir un fichero concreto, respetando cancelación y progreso
+    const processFile = async (file: File) => {
+      if (shouldCancelRef.current) return;
+
       const result = await uploadFile(file, guestName, setUploadError, uploadBatchId);
+
+      if (shouldCancelRef.current) return;
+
       if (result) {
-        // Recargar la foto más reciente de este batch
-        const recent = await supabase
-          .from('uploads')
-          .select('id, photo_url, video_url, guest_name, media_type, duration, upload_batch')
-          .eq('upload_batch', uploadBatchId)
-          .order('id', { ascending: false })
-          .limit(1);
-        if (recent.data && recent.data.length > 0) {
-          newPhotos.push(recent.data[0]);
-        }
         uploadedSoFar += file.size;
         setUploadProgress({ uploadedBytes: uploadedSoFar, totalBytes });
       } else {
         failed.push(file);
       }
+    };
+
+    // Limitador de concurrencia: 3 uploads en paralelo
+    const concurrency = 3;
+    let currentIndex = 0;
+
+    const workers = Array.from({ length: concurrency }).map(async () => {
+      while (currentIndex < fileArray.length && !shouldCancelRef.current) {
+        const file = fileArray[currentIndex++];
+        await processFile(file);
+      }
+    });
+
+    await Promise.all(workers);
+
+    let newPhotos: PhotoData[] = [];
+
+    if (!shouldCancelRef.current) {
+      // Recuperar todas las filas de este batch de una sola vez
+      const { data: batchRows, error } = await supabase
+        .from('uploads')
+        .select('id, photo_url, video_url, guest_name, media_type, duration, upload_batch')
+        .eq('upload_batch', uploadBatchId)
+        .order('id', { ascending: false });
+
+      if (!error && batchRows && batchRows.length > 0) {
+        newPhotos = batchRows as PhotoData[];
+        setPhotos(prev => [...newPhotos, ...prev]);
+      }
     }
-    if (newPhotos.length > 0) {
-      setPhotos(prev => [...newPhotos, ...prev]);
-    }
-    if (failed.length > 0 && !shouldCancelRef.current) {
+
+    if (shouldCancelRef.current) {
+      setUploadError('Subida cancelada');
+    } else if (failed.length > 0) {
       setFailedFiles(failed);
       setUploadError(`${failed.length} archivo(s) fallaron al subir`);
-    } else if (!shouldCancelRef.current && newPhotos.length > 0) {
+    } else if (newPhotos.length > 0) {
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 4000);
     }
+
     setIsUploading(false);
     setShouldCancel(false);
     shouldCancelRef.current = false;
