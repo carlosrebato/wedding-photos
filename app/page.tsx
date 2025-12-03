@@ -1092,26 +1092,40 @@ export default function Home() {
       )}
 
       {showCancelModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h2 className="text-xl font-bold mb-4">
+        <div
+          className="fixed inset-0 flex items-center justify-center p-4 z-50"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+        >
+          <div
+            className="w-full max-w-md rounded-3xl border-2 shadow-xl flex flex-col items-center px-6 py-8 gap-6"
+            style={{ backgroundColor: '#F4EBE2', borderColor: '#6C181F' }}
+          >
+            <h2
+              className="text-2xl sm:text-3xl font-bold text-center"
+              style={{ color: '#6E0005' }}
+            >
               ¿Cancelar subida?
             </h2>
-            
-            <p className="text-gray-700 mb-6">
+
+            <p
+              className="text-center font-medium text-base leading-relaxed"
+              style={{ color: '#6E0005', maxWidth: '360px' }}
+            >
               Se perderán las fotos que no se hayan subido todavía.
             </p>
 
-            <div className="flex gap-3">
+            <div className="w-full flex flex-col sm:flex-row gap-3">
               <button
                 onClick={confirmCancel}
-                className="flex-1 bg-red-500 text-white py-2 rounded-lg font-semibold hover:bg-red-600 transition-colors"
+                className="flex-1 text-white py-3 rounded-lg font-semibold text-sm transition-opacity hover:opacity-90"
+                style={{ backgroundColor: '#6C181F' }}
               >
                 Sí, cancelar
               </button>
               <button
                 onClick={() => setShowCancelModal(false)}
-                className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
+                className="flex-1 text-white py-3 rounded-lg font-semibold text-sm transition-opacity hover:opacity-90"
+                style={{ backgroundColor: '#364136' }}
               >
                 No, continuar
               </button>
@@ -1121,21 +1135,34 @@ export default function Home() {
       )}
 
       {uploadError && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h2 className="text-xl font-bold mb-4 text-red-600">
+        <div
+          className="fixed inset-0 flex items-center justify-center p-4 z-50"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+        >
+          <div
+            className="w-full max-w-md rounded-3xl border-2 shadow-xl flex flex-col items-center px-6 py-8 gap-6"
+            style={{ backgroundColor: '#F4EBE2', borderColor: '#6C181F' }}
+          >
+            <h2
+              className="text-2xl sm:text-3xl font-bold text-center"
+              style={{ color: '#6E0005' }}
+            >
               ⚠️ Error al subir
             </h2>
             
-            <p className="text-gray-700 mb-4">
+            <p
+              className="text-center font-medium text-base leading-relaxed"
+              style={{ color: '#6E0005', maxWidth: '360px' }}
+            >
               {uploadError}
             </p>
 
-            <div className="flex gap-3">
+            <div className="w-full flex flex-col sm:flex-row gap-3">
               {failedFiles.length > 0 && (
                 <button
                   onClick={retryFailedUploads}
-                  className="flex-1 bg-rose-500 text-white py-2 rounded-lg font-semibold hover:bg-rose-600 transition-colors"
+                  className="flex-1 text-white py-3 rounded-lg font-semibold text-sm transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: '#364136' }}
                 >
                   Reintentar
                 </button>
@@ -1145,7 +1172,8 @@ export default function Home() {
                   setUploadError(null);
                   setFailedFiles([]);
                 }}
-                className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
+                className="flex-1 text-white py-3 rounded-lg font-semibold text-sm transition-opacity hover:opacity-90"
+                style={{ backgroundColor: '#6C181F' }}
               >
                 Cerrar
               </button>
