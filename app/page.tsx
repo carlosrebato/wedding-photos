@@ -389,6 +389,7 @@ export default function Home() {
 
   const isLoadingMoreRef = useRef(false);
   const hasMoreRef = useRef(true);
+  const lastUploadBatchIdRef = useRef<string | null>(null);
 
   const [hasPreloadedInitial, setHasPreloadedInitial] = useState(false);
   const [hasLoadedFullInitial, setHasLoadedFullInitial] = useState(false);
@@ -677,13 +678,13 @@ export default function Home() {
   };
 
   // Upload handler with batch support, parallel uploads (concurrency=3), progress, and single batch fetch
-  const handleUpload = async (files: FileList) => {
+  const handleUpload = async (files: FileList, existingBatchId?: string) => {
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
 
-    // Validaciones de cantidad de archivos y peso para evitar que el navegador reviente
     const photos = fileArray.filter((f) => f.type.startsWith('image/'));
     const videos = fileArray.filter((f) => f.type.startsWith('video/'));
+    const hadVideoInThisBatch = videos.length > 0;
 
     // 1) Máximo 50 fotos si solo hay fotos
     if (videos.length === 0 && photos.length > 50) {
@@ -722,79 +723,95 @@ export default function Home() {
     setFailedFiles([]);
     setUploadProgress({ uploadedBytes: 0, totalBytes });
 
-    // ID único para este batch de subida
-    const uploadBatchId = `batch_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+    const uploadBatchId = existingBatchId ?? `batch_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+    lastUploadBatchIdRef.current = uploadBatchId;
 
     const failed: File[] = [];
     let uploadedSoFar = 0;
 
-    // Helper para subir un fichero concreto, respetando cancelación y progreso
-    const processFile = async (file: File) => {
-      if (shouldCancelRef.current) return;
+    const genericErrorMessage = hadVideoInThisBatch
+      ? 'Ha ocurrido un problema al subir tus archivos, prueba de nuevo con menos. Solo se puede subir 1 vídeo cada vez.'
+      : 'Ha ocurrido un problema al subir tus archivos, prueba de nuevo con menos.';
 
-      const result = await uploadFile(file, guestName, setUploadError, uploadBatchId);
+    try {
+      // Helper para subir un fichero concreto, respetando cancelación y progreso
+      const processFile = async (file: File) => {
+        if (shouldCancelRef.current) return;
 
-      if (shouldCancelRef.current) return;
+        const result = await uploadFile(file, guestName, setUploadError, uploadBatchId);
 
-      if (result) {
-        uploadedSoFar += file.size;
-        setUploadProgress({ uploadedBytes: uploadedSoFar, totalBytes });
+        if (shouldCancelRef.current) return;
+
+        if (result) {
+          uploadedSoFar += file.size;
+          setUploadProgress({ uploadedBytes: uploadedSoFar, totalBytes });
+        } else {
+          failed.push(file);
+        }
+      };
+
+      // Limitador de concurrencia: 3 uploads en paralelo
+      const concurrency = 3;
+      let currentIndex = 0;
+
+      const workers = Array.from({ length: concurrency }).map(async () => {
+        while (currentIndex < fileArray.length && !shouldCancelRef.current) {
+          const file = fileArray[currentIndex++];
+          await processFile(file);
+        }
+      });
+
+      await Promise.all(workers);
+
+      let newPhotos: PhotoData[] = [];
+
+      if (shouldCancelRef.current) {
+        const { error: deleteError } = await supabase
+          .from('uploads')
+          .delete()
+          .eq('upload_batch', uploadBatchId);
+
+        if (deleteError) {
+          console.error('Error borrando batch cancelado:', deleteError);
+        }
+
+        setUploadError('Subida cancelada');
       } else {
-        failed.push(file);
+        const { data: batchRows, error } = await supabase
+          .from('uploads')
+          .select('id, photo_url, video_url, guest_name, media_type, duration, upload_batch')
+          .eq('upload_batch', uploadBatchId)
+          .order('id', { ascending: false });
+
+        if (!error && batchRows && batchRows.length > 0) {
+          newPhotos = batchRows as PhotoData[];
+          setPhotos(prev => [...newPhotos, ...prev]);
+        }
+
+        if (failed.length > 0 && newPhotos.length > 0) {
+          // Caso 5: algunos archivos fallan y otros no
+          setFailedFiles(failed);
+          setUploadError('Algunos archivos no han podido subirse');
+        } else if (failed.length > 0 && newPhotos.length === 0) {
+          // Todos han fallado o no hay nada nuevo
+          setFailedFiles(failed);
+          setUploadError(genericErrorMessage);
+        } else if (newPhotos.length > 0) {
+          // Éxito total
+          setShowSuccess(true);
+          setTimeout(() => setShowSuccess(false), 4000);
+        } else {
+          // Caso 6/8/9/10: no hay nuevos registros ni errores explícitos
+          setUploadError(genericErrorMessage);
+        }
       }
-    };
-
-    // Limitador de concurrencia: 3 uploads en paralelo
-    const concurrency = 3;
-    let currentIndex = 0;
-
-    const workers = Array.from({ length: concurrency }).map(async () => {
-      while (currentIndex < fileArray.length && !shouldCancelRef.current) {
-        const file = fileArray[currentIndex++];
-        await processFile(file);
-      }
-    });
-
-    await Promise.all(workers);
-
-    let newPhotos: PhotoData[] = [];
-
-    if (shouldCancelRef.current) {
-      // Versión segura: si se ha cancelado, borramos todo el batch de la tabla
-      const { error: deleteError } = await supabase
-        .from('uploads')
-        .delete()
-        .eq('upload_batch', uploadBatchId);
-
-      if (deleteError) {
-        console.error('Error borrando batch cancelado:', deleteError);
-      }
-
-      setUploadError('Subida cancelada');
-    } else {
-      // Recuperar todas las filas de este batch de una sola vez
-      const { data: batchRows, error } = await supabase
-        .from('uploads')
-        .select('id, photo_url, video_url, guest_name, media_type, duration, upload_batch')
-        .eq('upload_batch', uploadBatchId)
-        .order('id', { ascending: false });
-
-      if (!error && batchRows && batchRows.length > 0) {
-        newPhotos = batchRows as PhotoData[];
-        setPhotos(prev => [...newPhotos, ...prev]);
-      }
-
-      if (failed.length > 0) {
-        setFailedFiles(failed);
-        setUploadError(`${failed.length} archivo(s) fallaron al subir`);
-      } else if (newPhotos.length > 0) {
-        setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 4000);
-      }
+    } catch (error) {
+      console.error('Error inesperado en handleUpload:', error);
+      setUploadError(genericErrorMessage);
+    } finally {
+      setIsUploading(false);
+      shouldCancelRef.current = false;
     }
-
-    setIsUploading(false);
-    shouldCancelRef.current = false;
   };
 
   const openFileSelector = () => {
@@ -841,7 +858,11 @@ export default function Home() {
     
     setUploadError(null);
     setFailedFiles([]);
-    handleUpload(dt.files);
+    if (lastUploadBatchIdRef.current) {
+      handleUpload(dt.files, lastUploadBatchIdRef.current);
+    } else {
+      handleUpload(dt.files);
+    }
   };
 
   const toggleLike = async (photoUrl: string) => {
@@ -1109,17 +1130,6 @@ export default function Home() {
             <p className="text-gray-700 mb-4">
               {uploadError}
             </p>
-
-            {failedFiles.length > 0 && (
-              <div className="mb-4 p-3 bg-gray-50 rounded max-h-32 overflow-y-auto">
-                <p className="text-sm font-semibold mb-2">Archivos que fallaron:</p>
-                <ul className="text-sm text-gray-600 list-disc list-inside">
-                  {failedFiles.map((file, i) => (
-                    <li key={i}>{file.name}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
 
             <div className="flex gap-3">
               {failedFiles.length > 0 && (
