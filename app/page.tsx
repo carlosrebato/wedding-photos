@@ -1222,6 +1222,11 @@ export default function Home() {
               onTouchStart={handleMediaTouchStart}
               onTouchMove={handleMediaTouchMove}
               onTouchEnd={handleMediaTouchEnd}
+              onClick={(e) => {
+                if (selectedPhotoIndex !== null && photos[selectedPhotoIndex].media_type === 'video') {
+                  e.stopPropagation();
+                }
+              }}
               style={{
                 transform: `translate3d(${dragX}px, ${dragY}px, 0)`,
                 transition: isDraggingMedia ? 'none' : 'transform 0.2s ease-out',
@@ -1404,7 +1409,7 @@ export default function Home() {
                 )}
                 {!hasMore && photos.length > 0 && (
                   <p className="text-gray-400 text-sm">
-                    ¡Has visto todas las fotos! 🎉
+                    ¡Has visto todas las fotos 😌! Puedes subir más con el botón de +
                   </p>
                 )}
               </div>
