@@ -1150,29 +1150,31 @@ export default function Home() {
               className="w-8 h-8"
             />
           </button>
+          {photos[selectedPhotoIndex].guest_name === guestName && !isModalMediaLoading && (
+            <button
+              onClick={() => deleteMedia(photos[selectedPhotoIndex].photo_url, photos[selectedPhotoIndex].video_url)}
+              className="fixed top-4 right-16 z-50 hover:opacity-80 transition-opacity"
+              title="Eliminar"
+            >
+              <img src="/assets/papelera.png" alt="Eliminar" className="w-8 h-8" />
+            </button>
+          )}
           <div
             className="relative max-w-4xl max-h-[90vh] flex flex-col items-center justify-center p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            {photos[selectedPhotoIndex].guest_name === guestName && !isModalMediaLoading && (
-              <button
-                onClick={() => deleteMedia(photos[selectedPhotoIndex].photo_url, photos[selectedPhotoIndex].video_url)}
-                className="absolute top-4 right-16 z-10 hover:opacity-80 transition-opacity"
-                title="Eliminar"
-              >
-                <img src="/assets/papelera.png" alt="Eliminar" className="w-6 h-6" />
-              </button>
-            )}
-
             {!isModalMediaLoading && (
               <button
-                onClick={goToPrevPhoto}
-                className="absolute left-4 z-10 hover:opacity-80 transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  goToPrevPhoto();
+                }}
+                className="fixed left-4 top-1/2 -translate-y-1/2 z-50 hover:opacity-80 transition-opacity"
               >
                 <img
                   src="/assets/flecha-izquierda.png"
                   alt="Foto anterior"
-                  className="w-8 h-8"
+                  className="w-10 h-10"
                 />
               </button>
             )}
@@ -1233,13 +1235,16 @@ export default function Home() {
 
             {!isModalMediaLoading && (
               <button
-                onClick={goToNextPhoto}
-                className="absolute right-4 z-10 hover:opacity-80 transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  goToNextPhoto();
+                }}
+                className="fixed right-4 top-1/2 -translate-y-1/2 z-50 hover:opacity-80 transition-opacity"
               >
                 <img
                   src="/assets/flecha-derecha.png"
                   alt="Foto siguiente"
-                  className="w-8 h-8"
+                  className="w-10 h-10"
                 />
               </button>
             )}
