@@ -260,11 +260,13 @@ function VideoInGallery({
   index,
   likes,
   onClick,
+  onLikeClick,
 }: {
   videoUrl: string;
   index: number;
   likes: number;
   onClick: () => void;
+  onLikeClick?: () => void;
 }) {
   const [shouldLoad, setShouldLoad] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -333,14 +335,21 @@ function VideoInGallery({
       )}
 
       {shouldLoad && likes > 0 && (
-        <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded-full text-sm flex items-center gap-1">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onLikeClick) onLikeClick();
+          }}
+          className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded-full text-sm flex items-center gap-1"
+        >
           <img
             src="/assets/red-heart.png"
             alt="Likes"
             className="w-4 h-4"
           />
           <span>{likes}</span>
-        </div>
+        </button>
       )}
     </div>
   );
@@ -1161,7 +1170,6 @@ export default function Home() {
           )}
           <div
             className="relative max-w-4xl max-h-[90vh] flex flex-col items-center justify-center p-4"
-            onClick={(e) => e.stopPropagation()}
           >
             {!isModalMediaLoading && (
               <button
@@ -1207,31 +1215,31 @@ export default function Home() {
                   onLoadChange={setIsModalMediaLoading}
                 />
               )}
-
-              {!isModalMediaLoading && (
-                <button
-                  onClick={() => toggleLike(photos[selectedPhotoIndex].photo_url)}
-                  className="flex items-center gap-3 text-white hover:scale-110 transition-transform"
-                >
-                  {userLikes.has(photos[selectedPhotoIndex].photo_url) ? (
-                    <img
-                      src="/assets/red-heart.png"
-                      alt="Quitar like"
-                      className="w-10 h-10"
-                    />
-                  ) : (
-                    <img
-                      src="/assets/negative-red-heart.png"
-                      alt="Dar like"
-                      className="w-10 h-10"
-                    />
-                  )}
-                  <span className="text-2xl font-bold">
-                    {photoLikes[photos[selectedPhotoIndex].photo_url] || 0}
-                  </span>
-                </button>
-              )}
             </div>
+
+            {!isModalMediaLoading && (
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleLike(photos[selectedPhotoIndex].photo_url); }}
+                className="flex items-center gap-3 text-white hover:scale-110 transition-transform"
+              >
+                {userLikes.has(photos[selectedPhotoIndex].photo_url) ? (
+                  <img
+                    src="/assets/red-heart.png"
+                    alt="Quitar like"
+                    className="w-10 h-10"
+                  />
+                ) : (
+                  <img
+                    src="/assets/negative-red-heart.png"
+                    alt="Dar like"
+                    className="w-10 h-10"
+                  />
+                )}
+                <span className="text-2xl font-bold">
+                  {photoLikes[photos[selectedPhotoIndex].photo_url] || 0}
+                </span>
+              </button>
+            )}
 
             {!isModalMediaLoading && (
               <button
@@ -1313,6 +1321,7 @@ export default function Home() {
                                   index={index}
                                   likes={likes}
                                   onClick={() => openPhotoModal(globalIndex)}
+                                  onLikeClick={() => toggleLike(item.photo_url)}
                                 />
                               ) : (
                                 <div
@@ -1331,14 +1340,21 @@ export default function Home() {
                                     fetchPriority={isFirstRow ? 'high' : 'auto'}
                                   />
                                   {likes > 0 && (
-                                    <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded-full text-sm flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleLike(item.photo_url);
+                                      }}
+                                      className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded-full text-sm flex items-center gap-1"
+                                    >
                                       <img
                                         src="/assets/red-heart.png"
                                         alt="Likes"
                                         className="w-4 h-4"
                                       />
                                       <span>{likes}</span>
-                                    </div>
+                                    </button>
                                   )}
                                 </div>
                               );
