@@ -313,15 +313,9 @@ function VideoInGallery({
           autoPlay
           muted
           playsInline
+          loop
           preload="none"
           className="w-full h-full object-cover"
-          onTimeUpdate={(e) => {
-            const video = e.currentTarget as HTMLVideoElement;
-            if (video.currentTime >= 10) {
-              video.currentTime = 0;
-              video.play().catch(() => {});
-            }
-          }}
         />
       ) : (
         <img
@@ -359,8 +353,14 @@ function VideoInGallery({
 
 export default function Home() {
   const [photos, setPhotos] = useState<PhotoData[]>([]);
-  const [guestName, setGuestName] = useState<string | null>(null);  
-  const [showModal, setShowModal] = useState(false);
+  const [guestName, setGuestName] = useState<string | null>(() => {
+    if (typeof document === 'undefined') return null;
+    return getCookie('guestName');
+  });
+  const [showModal, setShowModal] = useState<boolean>(() => {
+    if (typeof document === 'undefined') return false;
+    return !getCookie('guestName');
+  });
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ uploadedBytes: 0, totalBytes: 0 });
   const [showSuccess, setShowSuccess] = useState(false);
@@ -394,14 +394,6 @@ export default function Home() {
   const [hasPreloadedInitial, setHasPreloadedInitial] = useState(false);
   const [hasLoadedFullInitial, setHasLoadedFullInitial] = useState(false);
 
-  useEffect(() => {
-    const savedName = getCookie('guestName');
-    if (savedName) {
-      setGuestName(savedName);
-    } else {
-      setShowModal(true);
-    }
-  }, []);
 
   useEffect(() => {
     if (selectedPhotoIndex === null) return;
@@ -1041,7 +1033,7 @@ export default function Home() {
           style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
         >
           <div
-            className="w-full max-w-md rounded-3xl border-2 shadow-xl flex flex-col items-center px-6 py-8 gap-6"
+            className="w-full max-w-md rounded-3xl border-2 shadow-xl flex flex-col items-center px-6 py-8 gap-4"
             style={{ backgroundColor: '#F4EBE2', borderColor: '#6C181F' }}
           >
             <img
