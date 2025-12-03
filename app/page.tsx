@@ -1408,7 +1408,10 @@ export default function Home() {
                   </div>
                 )}
                 {!hasMore && photos.length > 0 && (
-                  <p className="text-gray-400 text-sm">
+                  <p
+                    className="text-gray-400 text-sm text-center mx-auto"
+                    style={{ paddingLeft: '20%', paddingRight: '20%' }}
+                  >
                     ¡Has visto todas las fotos 😌! Puedes subir más con el botón de +
                   </p>
                 )}
