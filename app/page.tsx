@@ -391,7 +391,7 @@ export default function Home() {
       adminTapCountRef.current = 0;
     }, 1200);
 
-    if (adminTapCountRef.current >= 5) {
+    if (adminTapCountRef.current >= 3) {
       adminTapCountRef.current = 0;
       setShowAdminModal(true);
     }
@@ -401,7 +401,7 @@ export default function Home() {
     e.preventDefault();
     const trimmed = adminPasswordInput.trim();
     // Contraseña secreta para modo admin: cámbiala si quieres
-    if (trimmed === 'verbena2025') {
+    if (trimmed === 'gandalf2025') {
       setIsAdmin(true);
       if (typeof window !== 'undefined') {
         window.localStorage.setItem('isAdmin', '1');
