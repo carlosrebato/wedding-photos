@@ -775,7 +775,7 @@ export default function Home() {
           console.error('Error borrando batch cancelado:', deleteError);
         }
 
-        setUploadError('Subida cancelada');
+        setUploadError('Los archivos no se han subido');
       } else {
         const { data: batchRows, error } = await supabase
           .from('uploads')
@@ -1147,7 +1147,7 @@ export default function Home() {
               className="text-2xl sm:text-3xl font-bold text-center"
               style={{ color: '#6E0005' }}
             >
-              ⚠️ Error al subir
+              ⚠️ Subida cancelada
             </h2>
             
             <p
