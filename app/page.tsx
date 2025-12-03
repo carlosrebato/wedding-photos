@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import Image from 'next/image';
 import Lottie from 'lottie-react';
@@ -235,13 +235,11 @@ function ImageWithLoader({ src, alt }: { src: string; alt: string }) {
 
 function VideoInGallery({
   videoUrl,
-  thumbnailUrl,
   index,
   likes,
   onClick,
 }: {
   videoUrl: string;
-  thumbnailUrl: string;
   index: number;
   likes: number;
   onClick: () => void;
@@ -338,6 +336,13 @@ export default function Home() {
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
   const [photoLikes, setPhotoLikes] = useState<Record<string, number>>({});
   const [userLikes, setUserLikes] = useState<Set<string>>(new Set());
+
+  // --- Drag state for photo/video modal ---
+  const [dragX, setDragX] = useState(0);
+  const [dragY, setDragY] = useState(0);
+  const [isDraggingMedia, setIsDraggingMedia] = useState(false);
+  const [dragAxis, setDragAxis] = useState<'x' | 'y' | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [failedFiles, setFailedFiles] = useState<File[]>([]);
@@ -874,6 +879,76 @@ export default function Home() {
     setSelectedPhotoIndex(null);
   };
 
+  // --- Handlers for touch gestures on modal media ---
+  const handleMediaTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!e.touches || e.touches.length === 0) return;
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    setIsDraggingMedia(false);
+    setDragAxis(null);
+    setDragX(0);
+    setDragY(0);
+  };
+
+  const handleMediaTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!touchStartRef.current || !e.touches || e.touches.length === 0) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - touchStartRef.current.x;
+    const dy = touch.clientY - touchStartRef.current.y;
+
+    // Ignore small movements (tap)
+    if (!isDraggingMedia && Math.sqrt(dx * dx + dy * dy) < 10) {
+      return;
+    }
+
+    if (!isDraggingMedia) {
+      setIsDraggingMedia(true);
+    }
+
+    let axis = dragAxis;
+    if (!axis) {
+      axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      setDragAxis(axis);
+    }
+
+    if (axis === 'x') {
+      setDragX(dx);
+      setDragY(0);
+    } else {
+      setDragY(dy);
+      setDragX(0);
+    }
+  };
+
+  const handleMediaTouchEnd = () => {
+    if (!isDraggingMedia) {
+      touchStartRef.current = null;
+      setDragX(0);
+      setDragY(0);
+      setDragAxis(null);
+      return;
+    }
+
+    const horizontalThreshold = 80;
+    const verticalThreshold = 80;
+
+    if (dragAxis === 'x' && Math.abs(dragX) > horizontalThreshold) {
+      if (dragX < 0) {
+        goToNextPhoto();
+      } else {
+        goToPrevPhoto();
+      }
+    } else if (dragAxis === 'y' && Math.abs(dragY) > verticalThreshold) {
+      closePhotoModal();
+    }
+
+    touchStartRef.current = null;
+    setIsDraggingMedia(false);
+    setDragX(0);
+    setDragY(0);
+    setDragAxis(null);
+  };
+
   // Group photos by upload_batch for each guest for segment grouping
   const photosByGuestSegments = useMemo(() => {
     // Map: guestName => Map<batchId, PhotoData[]>
@@ -1077,7 +1152,17 @@ export default function Home() {
               />
             </button>
 
-            <div className="max-w-4xl max-h-full flex flex-col items-center gap-6">
+            <div
+              className="max-w-4xl max-h-full flex flex-col items-center gap-6"
+              onTouchStart={handleMediaTouchStart}
+              onTouchMove={handleMediaTouchMove}
+              onTouchEnd={handleMediaTouchEnd}
+              style={{
+                transform: `translate3d(${dragX}px, ${dragY}px, 0)`,
+                transition: isDraggingMedia ? 'none' : 'transform 0.2s ease-out',
+                opacity: dragAxis === 'y' ? 1 - Math.min(0.5, Math.abs(dragY) / 300) : 1,
+              }}
+            >
               {photos[selectedPhotoIndex].media_type === 'video' && photos[selectedPhotoIndex].video_url ? (
                 <video
                   src={photos[selectedPhotoIndex].video_url}
@@ -1188,7 +1273,6 @@ export default function Home() {
                                 <VideoInGallery
                                   key={item.id}
                                   videoUrl={item.video_url}
-                                  thumbnailUrl={item.photo_url}
                                   index={index}
                                   likes={likes}
                                   onClick={() => openPhotoModal(globalIndex)}
