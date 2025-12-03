@@ -80,7 +80,7 @@ async function uploadFile(
   guestName: string | null,
   onError: (msg: string) => void,
   uploadBatchId: string
-): Promise<{ url: string; mediaType: 'image' | 'video'; videoUrl?: string; duration?: number } | null> {
+): Promise<{ url: string; videoUrl?: string; duration?: number } | null> {
   try {
     const isVideo = file.type.startsWith('video/');
 
@@ -130,7 +130,7 @@ async function uploadFile(
       });
       if (dbError) return null;
 
-      return { url: thumbnailUrl, mediaType: 'video', videoUrl, duration };
+      return { url: thumbnailUrl, videoUrl, duration };
     }
 
     const timestamp = Date.now();
@@ -162,7 +162,7 @@ async function uploadFile(
     });
     if (dbError) return null;
 
-    return { url: publicUrl, mediaType: 'image' };
+    return { url: publicUrl };
   } catch {
     return null;
   }
@@ -347,7 +347,6 @@ export default function Home() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [failedFiles, setFailedFiles] = useState<File[]>([]);
   const [showCancelModal, setShowCancelModal] = useState(false);
-  const [shouldCancel, setShouldCancel] = useState(false);
   const shouldCancelRef = useRef(false);
 
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -574,11 +573,12 @@ export default function Home() {
     loadRemainingInitial();
   }, [guestName, photos.length, hasLoadedFullInitial]);
 
+  const photosLength = photos.length;
   useEffect(() => {
-    if (guestName && photos.length > 0) {
+    if (guestName && photosLength > 0) {
       loadAllLikes();
     }
-  }, [guestName, photos.length, loadAllLikes]);
+  }, [guestName, photosLength, loadAllLikes]);
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -594,7 +594,7 @@ export default function Home() {
     }
   };
 
-  const deleteMedia = async (photoUrl: string, videoUrl?: string, mediaType?: 'image' | 'video') => {
+  const deleteMedia = async (photoUrl: string, videoUrl?: string) => {
     const confirmed = confirm('¿Seguro que quieres eliminar este archivo?');
     if (!confirmed) return;
 
@@ -685,7 +685,6 @@ export default function Home() {
     const totalBytes = fileArray.reduce((sum, file) => sum + file.size, 0);
 
     setIsUploading(true);
-    setShouldCancel(false);
     shouldCancelRef.current = false;
     setUploadError(null);
     setFailedFiles([]);
@@ -763,7 +762,6 @@ export default function Home() {
     }
 
     setIsUploading(false);
-    setShouldCancel(false);
     shouldCancelRef.current = false;
   };
 
@@ -799,7 +797,6 @@ export default function Home() {
   };
 
   const confirmCancel = () => {
-    setShouldCancel(true);
     shouldCancelRef.current = true;
     setShowCancelModal(false);
   };
@@ -1112,12 +1109,12 @@ export default function Home() {
       )}
 
       {selectedPhotoIndex !== null && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center overscroll-none"
+        <div
+          className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center overscroll-none overflow-y-auto"
           onClick={closePhotoModal}
         >
-          <div 
-            className="relative w-full h-full flex items-center justify-center p-4 overflow-y-auto"
+          <div
+            className="relative max-w-4xl max-h-[90vh] flex flex-col items-center justify-center p-4"
             onClick={(e) => e.stopPropagation()}
           >
             <button
