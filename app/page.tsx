@@ -1113,6 +1113,16 @@ export default function Home() {
           className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center overscroll-none overflow-y-auto"
           onClick={closePhotoModal}
         >
+          <button
+            onClick={closePhotoModal}
+            className="fixed top-4 right-4 z-50 hover:opacity-80 transition-opacity"
+          >
+            <img
+              src="/assets/Cruz.png"
+              alt="Cerrar"
+              className="w-8 h-8"
+            />
+          </button>
           <div
             className="relative max-w-4xl max-h-[90vh] flex flex-col items-center justify-center p-4"
             onClick={(e) => e.stopPropagation()}
@@ -1194,17 +1204,6 @@ export default function Home() {
               <img
                 src="/assets/flecha-derecha.png"
                 alt="Foto siguiente"
-                className="w-8 h-8"
-              />
-            </button>
-
-            <button
-              onClick={closePhotoModal}
-              className="absolute top-4 right-4 z-10 hover:opacity-80 transition-opacity"
-            >
-              <img
-                src="/assets/Cruz.png"
-                alt="Cerrar"
                 className="w-8 h-8"
               />
             </button>
