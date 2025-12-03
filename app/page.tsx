@@ -1220,7 +1220,7 @@ export default function Home() {
             {!isModalMediaLoading && (
               <button
                 onClick={(e) => { e.stopPropagation(); toggleLike(photos[selectedPhotoIndex].photo_url); }}
-                className="flex items-center gap-3 text-white hover:scale-110 transition-transform"
+                className="flex items-center gap-3 text-white hover:scale-110 transition-transform mt-3"
               >
                 {userLikes.has(photos[selectedPhotoIndex].photo_url) ? (
                   <img
