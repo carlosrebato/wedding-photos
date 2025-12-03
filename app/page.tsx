@@ -368,6 +368,50 @@ export default function Home() {
   const [photoLikes, setPhotoLikes] = useState<Record<string, number>>({});
   const [userLikes, setUserLikes] = useState<Set<string>>(new Set());
   const [isModalMediaLoading, setIsModalMediaLoading] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const adminTapCountRef = useRef(0);
+  const adminTapTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stored = window.localStorage.getItem('isAdmin');
+    if (stored === '1') {
+      setIsAdmin(true);
+    }
+  }, []);
+  const handleLogoTap = () => {
+    adminTapCountRef.current += 1;
+
+    if (adminTapTimeoutRef.current) {
+      clearTimeout(adminTapTimeoutRef.current);
+    }
+
+    adminTapTimeoutRef.current = setTimeout(() => {
+      adminTapCountRef.current = 0;
+    }, 1200);
+
+    if (adminTapCountRef.current >= 5) {
+      adminTapCountRef.current = 0;
+      setShowAdminModal(true);
+    }
+  };
+
+  const handleAdminSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = adminPasswordInput.trim();
+    // Contraseña secreta para modo admin: cámbiala si quieres
+    if (trimmed === 'verbena2025') {
+      setIsAdmin(true);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('isAdmin', '1');
+      }
+      setAdminPasswordInput('');
+      setShowAdminModal(false);
+    } else {
+      alert('Contraseña incorrecta');
+    }
+  };
 
   // --- Drag state for photo/video modal ---
   const [dragX, setDragX] = useState(0);
@@ -1174,6 +1218,71 @@ export default function Home() {
         </div>
       )}
 
+      {showAdminModal && (
+        <div
+          className="fixed inset-0 flex items-center justify-center p-4 z-50"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+          onClick={() => setShowAdminModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-3xl border-2 shadow-xl flex flex-col items-center px-6 py-8 gap-6"
+            style={{ backgroundColor: '#F4EBE2', borderColor: '#6C181F' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2
+              className="text-2xl sm:text-3xl font-bold text-center"
+              style={{ color: '#6E0005' }}
+            >
+              Modo admin
+            </h2>
+
+            <p
+              className="text-center font-medium text-base leading-relaxed"
+              style={{ color: '#6E0005', maxWidth: '360px' }}
+            >
+              Introduce la contraseña para poder borrar cualquier foto o vídeo.
+            </p>
+
+            <form onSubmit={handleAdminSubmit} className="w-full flex flex-col gap-3">
+              <input
+                type="password"
+                value={adminPasswordInput}
+                onChange={(e) => setAdminPasswordInput(e.target.value)}
+                placeholder="Contraseña"
+                className="w-full px-4 py-2 rounded-lg text-center text-base"
+                style={{
+                  backgroundColor: 'white',
+                  border: '1px solid #D4C5BB',
+                  color: '#6E0005',
+                  fontSize: '16px',
+                }}
+              />
+
+              <div className="w-full flex flex-col sm:flex-row gap-3">
+                <button
+                  type="submit"
+                  className="flex-1 text-white py-3 rounded-lg font-semibold text-sm transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: '#364136' }}
+                >
+                  Entrar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAdminModal(false);
+                    setAdminPasswordInput('');
+                  }}
+                  className="flex-1 text-white py-3 rounded-lg font-semibold text-sm transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: '#6C181F' }}
+                >
+                  Cerrar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {selectedPhotoIndex !== null && (
         <div
           className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center overscroll-none overflow-y-auto"
@@ -1189,7 +1298,7 @@ export default function Home() {
               className="w-8 h-8"
             />
           </button>
-          {photos[selectedPhotoIndex].guest_name === guestName && !isModalMediaLoading && (
+          {(photos[selectedPhotoIndex].guest_name === guestName || isAdmin) && !isModalMediaLoading && (
             <button
               onClick={() => deleteMedia(photos[selectedPhotoIndex].photo_url, photos[selectedPhotoIndex].video_url)}
               className="fixed top-4 right-16 z-50 hover:opacity-80 transition-opacity"
@@ -1297,7 +1406,10 @@ export default function Home() {
 
       <header className="sticky top-0 z-40" style={{ backgroundColor: '#F4EAE3' }}>
         <div className="flex items-center justify-center py-2 px-4">
-          <div className="relative w-40 h-12">
+          <div
+            className="relative w-40 h-12 cursor-pointer"
+            onClick={handleLogoTap}
+          >
             <Image
               src="/Carlos + Andrea.png"
               alt="Carlos + Andrea"
