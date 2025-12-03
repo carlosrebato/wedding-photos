@@ -1117,21 +1117,10 @@ export default function Home() {
             className="relative max-w-4xl max-h-[90vh] flex flex-col items-center justify-center p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              onClick={closePhotoModal}
-              className="absolute top-4 right-4 z-10 hover:opacity-80 transition-opacity"
-            >
-              <img
-                src="/assets/Cruz.png"
-                alt="Cerrar"
-                className="w-8 h-8"
-              />
-            </button>
-
             {photos[selectedPhotoIndex].guest_name === guestName && (
               <button
                 onClick={() => deleteMedia(photos[selectedPhotoIndex].photo_url, photos[selectedPhotoIndex].video_url)}
-                className="absolute top-4 right-16 text-white bg-red-500 p-2 rounded-full hover:bg-red-600 z-10"
+                className="absolute top-4 right-16 z-10 hover:opacity-80 transition-opacity"
                 title="Eliminar"
               >
                 <img src="/assets/papelera.png" alt="Eliminar" className="w-6 h-6" />
@@ -1205,6 +1194,17 @@ export default function Home() {
               <img
                 src="/assets/flecha-derecha.png"
                 alt="Foto siguiente"
+                className="w-8 h-8"
+              />
+            </button>
+
+            <button
+              onClick={closePhotoModal}
+              className="absolute top-4 right-4 z-10 hover:opacity-80 transition-opacity"
+            >
+              <img
+                src="/assets/Cruz.png"
+                alt="Cerrar"
                 className="w-8 h-8"
               />
             </button>
