@@ -198,9 +198,23 @@ function GallerySkeleton({ count = 8 }: { count?: number }) {
   );
 }
 
-function ImageWithLoader({ src, alt }: { src: string; alt: string }) {
+function ImageWithLoader({
+  src,
+  alt,
+  onLoadChange,
+}: {
+  src: string;
+  alt: string;
+  onLoadChange?: (isLoading: boolean) => void;
+}) {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    if (onLoadChange) {
+      onLoadChange(true);
+    }
+  }, [onLoadChange]);
 
   return (
     <div className="relative w-full max-w-4xl max-h-[70vh] flex items-center justify-center">
@@ -223,10 +237,18 @@ function ImageWithLoader({ src, alt }: { src: string; alt: string }) {
         className={`max-w-full max-h-[70vh] object-contain rounded-lg transition-opacity duration-300 ${
           isLoading ? 'opacity-0' : 'opacity-100'
         }`}
-        onLoad={() => setIsLoading(false)}
+        onLoad={() => {
+          setIsLoading(false);
+          if (onLoadChange) {
+            onLoadChange(false);
+          }
+        }}
         onError={() => {
           setIsLoading(false);
           setHasError(true);
+          if (onLoadChange) {
+            onLoadChange(false);
+          }
         }}
       />
     </div>
@@ -336,6 +358,7 @@ export default function Home() {
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
   const [photoLikes, setPhotoLikes] = useState<Record<string, number>>({});
   const [userLikes, setUserLikes] = useState<Set<string>>(new Set());
+  const [isModalMediaLoading, setIsModalMediaLoading] = useState(false);
 
   // --- Drag state for photo/video modal ---
   const [dragX, setDragX] = useState(0);
@@ -858,22 +881,26 @@ export default function Home() {
 
   const openPhotoModal = (index: number) => {
     setSelectedPhotoIndex(index);
+    setIsModalMediaLoading(true);
   };
 
   const goToPrevPhoto = () => {
     if (selectedPhotoIndex === null) return;
     const newIndex = selectedPhotoIndex > 0 ? selectedPhotoIndex - 1 : photos.length - 1;
+    setIsModalMediaLoading(true);
     openPhotoModal(newIndex);
   };
 
   const goToNextPhoto = () => {
     if (selectedPhotoIndex === null) return;
     const newIndex = selectedPhotoIndex < photos.length - 1 ? selectedPhotoIndex + 1 : 0;
+    setIsModalMediaLoading(true);
     openPhotoModal(newIndex);
   };
 
   const closePhotoModal = () => {
     setSelectedPhotoIndex(null);
+    setIsModalMediaLoading(false);
   };
 
   // --- Handlers for touch gestures on modal media ---
@@ -1127,7 +1154,7 @@ export default function Home() {
             className="relative max-w-4xl max-h-[90vh] flex flex-col items-center justify-center p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            {photos[selectedPhotoIndex].guest_name === guestName && (
+            {photos[selectedPhotoIndex].guest_name === guestName && !isModalMediaLoading && (
               <button
                 onClick={() => deleteMedia(photos[selectedPhotoIndex].photo_url, photos[selectedPhotoIndex].video_url)}
                 className="absolute top-4 right-16 z-10 hover:opacity-80 transition-opacity"
@@ -1137,16 +1164,18 @@ export default function Home() {
               </button>
             )}
 
-            <button
-              onClick={goToPrevPhoto}
-              className="absolute left-4 z-10 hover:opacity-80 transition-opacity"
-            >
-              <img
-                src="/assets/flecha-izquierda.png"
-                alt="Foto anterior"
-                className="w-8 h-8"
-              />
-            </button>
+            {!isModalMediaLoading && (
+              <button
+                onClick={goToPrevPhoto}
+                className="absolute left-4 z-10 hover:opacity-80 transition-opacity"
+              >
+                <img
+                  src="/assets/flecha-izquierda.png"
+                  alt="Foto anterior"
+                  className="w-8 h-8"
+                />
+              </button>
+            )}
 
             <div
               className="max-w-4xl max-h-full flex flex-col items-center gap-6"
@@ -1166,47 +1195,54 @@ export default function Home() {
                   autoPlay
                   playsInline
                   className="max-w-full max-h-[60vh] rounded-lg"
+                  onLoadedData={() => setIsModalMediaLoading(false)}
+                  onLoadStart={() => setIsModalMediaLoading(true)}
                 />
               ) : (
                 <ImageWithLoader 
                   src={getWebUrl(photos[selectedPhotoIndex].photo_url)}
                   alt="Foto"
+                  onLoadChange={setIsModalMediaLoading}
                 />
               )}
 
-              <button
-                onClick={() => toggleLike(photos[selectedPhotoIndex].photo_url)}
-                className="flex items-center gap-3 text-white hover:scale-110 transition-transform"
-              >
-                {userLikes.has(photos[selectedPhotoIndex].photo_url) ? (
-                  <img
-                    src="/assets/red-heart.png"
-                    alt="Quitar like"
-                    className="w-10 h-10"
-                  />
-                ) : (
-                  <img
-                    src="/assets/negative-red-heart.png"
-                    alt="Dar like"
-                    className="w-10 h-10"
-                  />
-                )}
-                <span className="text-2xl font-bold">
-                  {photoLikes[photos[selectedPhotoIndex].photo_url] || 0}
-                </span>
-              </button>
+              {!isModalMediaLoading && (
+                <button
+                  onClick={() => toggleLike(photos[selectedPhotoIndex].photo_url)}
+                  className="flex items-center gap-3 text-white hover:scale-110 transition-transform"
+                >
+                  {userLikes.has(photos[selectedPhotoIndex].photo_url) ? (
+                    <img
+                      src="/assets/red-heart.png"
+                      alt="Quitar like"
+                      className="w-10 h-10"
+                    />
+                  ) : (
+                    <img
+                      src="/assets/negative-red-heart.png"
+                      alt="Dar like"
+                      className="w-10 h-10"
+                    />
+                  )}
+                  <span className="text-2xl font-bold">
+                    {photoLikes[photos[selectedPhotoIndex].photo_url] || 0}
+                  </span>
+                </button>
+              )}
             </div>
 
-            <button
-              onClick={goToNextPhoto}
-              className="absolute right-4 z-10 hover:opacity-80 transition-opacity"
-            >
-              <img
-                src="/assets/flecha-derecha.png"
-                alt="Foto siguiente"
-                className="w-8 h-8"
-              />
-            </button>
+            {!isModalMediaLoading && (
+              <button
+                onClick={goToNextPhoto}
+                className="absolute right-4 z-10 hover:opacity-80 transition-opacity"
+              >
+                <img
+                  src="/assets/flecha-derecha.png"
+                  alt="Foto siguiente"
+                  className="w-8 h-8"
+                />
+              </button>
+            )}
           </div>
         </div>
       )}
