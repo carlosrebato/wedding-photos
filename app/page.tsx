@@ -92,7 +92,10 @@ async function uploadFile(
       }
       if (sizeMB > 100) {
         const confirmed = confirm(`⚠️ Este video pesa ${sizeMB.toFixed(0)}MB. ¿Continuar?`);
-        if (!confirmed) return null;
+        if (!confirmed) {
+          onError('Se ha cancelado la subida de vídeo.');
+          return null;
+        }
       }
 
       let duration = 0;
@@ -863,43 +866,49 @@ export default function Home() {
     }
   };
   // Focus-based detection of empty selection or picker cancel (step A2)
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
+    useEffect(() => {
+      if (typeof window === 'undefined') return;
 
-    const handleFocus = () => {
-      if (!pickerOpenedRef.current) return;
+      const handleFocus = () => {
+        if (!pickerOpenedRef.current) return;
 
-      pickerOpenedRef.current = false;
-      const input = fileInputRef.current;
-      if (!input) return;
+        pickerOpenedRef.current = false;
+        const input = fileInputRef.current;
+        if (!input) return;
 
-      const files = input.files;
-      if (!files || files.length === 0) {
-        const ua = navigator.userAgent;
-        const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
-        const isIOS = /iPad|iPhone|iPod/.test(ua);
+        const files = input.files;
+        if (!files || files.length === 0) {
+          const ua = navigator.userAgent;
+          const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+          const isIOS = /iPad|iPhone|iPod/.test(ua);
 
-        if (isSafari && isIOS) {
-          alert(
-            '⚠️ Safari canceló la selección (probablemente por falta de memoria).\n\n' +
-              '💡 Soluciones:\n' +
-              '1. Cierra Safari completamente (desliza hacia arriba desde las apps abiertas)\n' +
-              '2. Vuelve a intentarlo\n' +
-              '3. O usa Chrome (soporta más fotos de golpe)'
-          );
-        } else {
-          setUploadError(
-            'Ha habido un problema al seleccionar tus archivos. Prueba de nuevo con menos fotos/vídeos a la vez.'
-          );
+          if (isSafari && isIOS) {
+            alert(
+              "Parece que no se han podido cargar tus archivos.\n\n" +
+              "A veces pasa cuando el teléfono va un poco justo de memoria.\n\n" +
+              "Prueba esto:\n" +
+              "1. Cierra el navegador por completo.\n" +
+              "2. Ábrelo de nuevo y repite la selección.\n" +
+              "3. Si sigue fallando, Chrome suele aguantar más fotos a la vez."
+            );
+          } else {
+            setUploadError(
+              "Parece que no se han podido cargar tus archivos.\n\n" +
+              "A veces pasa cuando el teléfono va un poco justo de memoria.\n\n" +
+              "Prueba esto:\n" +
+              "1. Cierra el navegador por completo.\n" +
+              "2. Ábrelo de nuevo y repite la selección.\n" +
+              "3. Si sigue fallando, Chrome suele aguantar más fotos a la vez."
+            );
+          }
         }
-      }
-    };
+      };
 
-    window.addEventListener('focus', handleFocus);
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, []);
+      window.addEventListener('focus', handleFocus);
+      return () => {
+        window.removeEventListener('focus', handleFocus);
+      };
+    }, []);
 
   const confirmCancel = () => {
     shouldCancelRef.current = true;
