@@ -998,6 +998,33 @@ export default function Home() {
     setIsModalMediaLoading(false);
   };
 
+  const handleDownload = () => {
+    if (selectedPhotoIndex === null) return;
+
+    const item = photos[selectedPhotoIndex];
+    let url: string | null = null;
+
+    if (item.media_type === 'video' && item.video_url) {
+      url = item.video_url;
+    } else {
+      url = getWebUrl(item.photo_url);
+    }
+
+    if (!url) return;
+
+    try {
+      const link = document.createElement('a');
+      link.href = url;
+      // Dejamos el nombre vacío para que el navegador elija uno razonable
+      link.download = '';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+      console.error('Error al descargar el archivo:', e);
+    }
+  };
+
   useEffect(() => {
     if (selectedPhotoIndex === null) return;
 
@@ -1343,10 +1370,26 @@ export default function Home() {
               className="w-8 h-8"
             />
           </button>
+          {!isModalMediaLoading && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDownload();
+              }}
+              className="fixed top-4 right-16 z-50 hover:opacity-80 transition-opacity"
+              title="Descargar"
+            >
+              <img
+                src="/assets/download.png"
+                alt="Descargar"
+                className="w-8 h-8"
+              />
+            </button>
+          )}
           {(photos[selectedPhotoIndex].guest_name === guestName || isAdmin) && !isModalMediaLoading && (
             <button
               onClick={() => deleteMedia(photos[selectedPhotoIndex].photo_url, photos[selectedPhotoIndex].video_url)}
-              className="fixed top-4 right-16 z-50 hover:opacity-80 transition-opacity"
+              className="fixed top-4 right-28 z-50 hover:opacity-80 transition-opacity"
               title="Eliminar"
             >
               <img src="/assets/papelera.png" alt="Eliminar" className="w-8 h-8" />
