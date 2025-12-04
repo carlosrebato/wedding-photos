@@ -998,6 +998,22 @@ export default function Home() {
     setIsModalMediaLoading(false);
   };
 
+  useEffect(() => {
+    if (selectedPhotoIndex === null) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        e.preventDefault();
+        closePhotoModal();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedPhotoIndex]);
+
   // --- Handlers for touch gestures on modal media ---
   const handleMediaTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!e.touches || e.touches.length === 0) return;
@@ -1212,7 +1228,7 @@ export default function Home() {
               className="text-2xl sm:text-3xl font-bold text-center"
               style={{ color: '#6E0005' }}
             >
-              ⚠️ Subida cancelada
+              ✅ Subida cancelada
             </h2>
             
             <p
@@ -1572,28 +1588,29 @@ export default function Home() {
         onChange={(e) => {
           const files = e.target.files;
           if (!files || files.length === 0) {
+            // Nada seleccionado: dejamos que el detector por focus se encargue si hace falta
             return;
           }
 
-          // Construimos una "firma" de la selección para detectar eventos duplicados (p.ej. Safari)
+          // Construimos una "firma" de la selección SOLO para informar al detector por focus,
+          // pero ya NO usamos esto para ignorar eventos.
           const fileArray = Array.from(files);
-          const signature = `${fileArray.length}:` + fileArray
-            .map(f => `${f.name}:${f.size}:${f.lastModified}`)
-            .join('|');
+          const signature =
+            `${fileArray.length}:` +
+            fileArray
+              .map((f) => `${f.name}:${f.size}:${f.lastModified}`)
+              .join('|');
 
-          const now = Date.now();
-          const last = lastSelectionRef.current;
+          lastSelectionRef.current = { signature, timestamp: Date.now() };
 
-          if (last && last.signature === signature && now - last.timestamp < 2000) {
-            // Mismo lote, mismo momento: probablemente un onChange duplicado => ignoramos
-            return;
-          }
-
-          lastSelectionRef.current = { signature, timestamp: now };
-
-          // Selection succeeded, no hace falta que el detector por focus dispare alerta
+          // Selección correcta: desarmamos el detector por focus
           pickerOpenedRef.current = false;
+
+          // Siempre procesamos cualquier selección que traiga archivos,
+          // aunque el navegador haya disparado onChange dos veces.
           handleUpload(files);
+
+          // Reset del input para permitir subir el mismo archivo de nuevo si se quiere
           e.target.value = '';
         }}
       />
