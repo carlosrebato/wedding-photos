@@ -733,7 +733,7 @@ export default function Home() {
 
     // 1) Máximo 50 fotos si solo hay fotos
     if (videos.length === 0 && photos.length > 50) {
-      alert('¡Eso son muchas fotos! Prueba 50 a la vez como máximo.');
+      setUploadError('¡Eso son muchas fotos! Prueba 50 a la vez como máximo.');
       return;
     }
 
@@ -741,7 +741,7 @@ export default function Home() {
     if (videos.length > 0) {
       // 2a) Máximo 1 vídeo por subida
       if (videos.length > 1) {
-        alert('Solo puedes subir un vídeo por tanda. Sube ese primero y luego el siguiente.');
+        setUploadError('Solo puedes subir un vídeo por tanda. Sube ese primero y luego el siguiente.');
         return;
       }
       const totalVideoBytes = videos.reduce((sum, f) => sum + f.size, 0);
@@ -749,13 +749,13 @@ export default function Home() {
 
       // 2b) Peso total de vídeo máximo 200 MB
       if (totalVideoMB > 200) {
-        alert('El vídeo es muy pesado o muy largo, prueba con un vídeo más corto.');
+        setUploadError('El vídeo es muy pesado o muy largo, prueba con un vídeo más corto.');
         return;
       }
 
       // 2c) Si hay vídeos, máximo 10 fotos acompañando
       if (photos.length > 10) {
-        alert('Has intentado subir demasiadas cosas a la vez, prueba a separar fotos y vídeos en diferentes tandas.');
+        setUploadError('Has intentado subir demasiadas cosas a la vez, prueba a separar fotos y vídeos en diferentes tandas.');
         return;
       }
     }
