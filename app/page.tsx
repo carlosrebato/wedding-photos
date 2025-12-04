@@ -377,6 +377,8 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Ref to track if file picker was opened (for focus-based empty selection detection)
   const pickerOpenedRef = useRef<boolean>(false);
+  // Ref to detect duplicated selections (e.g. Safari firing onChange twice)
+  const lastSelectionRef = useRef<{ signature: string; timestamp: number } | null>(null);
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const stored = window.localStorage.getItem('isAdmin');
@@ -514,7 +516,7 @@ export default function Home() {
   }, [guestName]);
 
   const loadMore = useCallback(async () => {
-    if (isLoadingMoreRef.current || !hasMoreRef.current || photos.length === 0) {
+    if (isUploading || isLoadingMoreRef.current || !hasMoreRef.current || photos.length === 0) {
       return;
     }
     
@@ -533,7 +535,7 @@ export default function Home() {
 
     setIsLoadingMore(false);
     isLoadingMoreRef.current = false;
-  }, [photos]);
+  }, [photos, isUploading]);
 
   useEffect(() => {
     if (!loadMoreRef.current || isInitialLoading) return;
@@ -790,8 +792,8 @@ export default function Home() {
         }
       };
 
-      // Limitador de concurrencia: 3 uploads en paralelo
-      const concurrency = 3;
+      // Limitador de concurrencia: menos workers si hay vídeo para ser más amables con móvil
+      const concurrency = hadVideoInThisBatch ? 1 : 2;
       let currentIndex = 0;
 
       const workers = Array.from({ length: concurrency }).map(async () => {
@@ -1563,6 +1565,25 @@ export default function Home() {
           if (!files || files.length === 0) {
             return;
           }
+
+          // Construimos una "firma" de la selección para detectar eventos duplicados (p.ej. Safari)
+          const fileArray = Array.from(files);
+          const signature = `${fileArray.length}:` + fileArray
+            .map(f => `${f.name}:${f.size}:${f.lastModified}`)
+            .join('|');
+
+          const now = Date.now();
+          const last = lastSelectionRef.current;
+
+          if (last && last.signature === signature && now - last.timestamp < 2000) {
+            // Mismo lote, mismo momento: probablemente un onChange duplicado => ignoramos
+            return;
+          }
+
+          lastSelectionRef.current = { signature, timestamp: now };
+
+          // Selection succeeded, no hace falta que el detector por focus dispare alerta
+          pickerOpenedRef.current = false;
           handleUpload(files);
           e.target.value = '';
         }}
