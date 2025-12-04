@@ -1255,7 +1255,7 @@ export default function Home() {
               className="text-2xl sm:text-3xl font-bold text-center"
               style={{ color: '#6E0005' }}
             >
-              ✅ Subida cancelada
+              ❌ Subida cancelada
             </h2>
             
             <p
