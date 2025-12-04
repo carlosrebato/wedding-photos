@@ -373,6 +373,10 @@ export default function Home() {
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const adminTapCountRef = useRef(0);
   const adminTapTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Persistent file input ref for uploads
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Ref to track if file picker was opened (for focus-based empty selection detection)
+  const pickerOpenedRef = useRef<boolean>(false);
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const stored = window.localStorage.getItem('isAdmin');
@@ -851,35 +855,49 @@ export default function Home() {
   };
 
   const openFileSelector = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*,video/*';
-    input.multiple = true;
-    
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    
-    input.onchange = (e) => {
-      const files = (e.target as HTMLInputElement).files;
-      
-      if (!files || files.length === 0) {
-        if (isSafari && isIOS) {
-          setTimeout(() => {
-            alert('⚠️ Safari canceló la selección (probablemente por falta de memoria).\n\n' +
-                  '💡 Soluciones:\n' +
-                  '1. Cierra Safari completamente (desliza hacia arriba desde las apps abiertas)\n' +
-                  '2. Vuelve a intentarlo\n' +
-                  '3. O usa Chrome (soporta más fotos de golpe)');
-          }, 100);
-        }
-        return;
-      }
-      
-      handleUpload(files);
-      input.value = '';
-    };
-    input.click();
+    if (fileInputRef.current) {
+      pickerOpenedRef.current = true;
+      fileInputRef.current.click();
+    }
   };
+  // Focus-based detection of empty selection or picker cancel (step A2)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleFocus = () => {
+      if (!pickerOpenedRef.current) return;
+
+      pickerOpenedRef.current = false;
+      const input = fileInputRef.current;
+      if (!input) return;
+
+      const files = input.files;
+      if (!files || files.length === 0) {
+        const ua = navigator.userAgent;
+        const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+        const isIOS = /iPad|iPhone|iPod/.test(ua);
+
+        if (isSafari && isIOS) {
+          alert(
+            '⚠️ Safari canceló la selección (probablemente por falta de memoria).\n\n' +
+              '💡 Soluciones:\n' +
+              '1. Cierra Safari completamente (desliza hacia arriba desde las apps abiertas)\n' +
+              '2. Vuelve a intentarlo\n' +
+              '3. O usa Chrome (soporta más fotos de golpe)'
+          );
+        } else {
+          setUploadError(
+            'Ha habido un problema al seleccionar tus archivos. Prueba de nuevo con menos fotos/vídeos a la vez.'
+          );
+        }
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
 
   const confirmCancel = () => {
     shouldCancelRef.current = true;
@@ -1532,6 +1550,23 @@ export default function Home() {
           )}
         </div>
       </main>
+
+      {/* Persistent hidden file input for uploads */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,video/*"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const files = e.target.files;
+          if (!files || files.length === 0) {
+            return;
+          }
+          handleUpload(files);
+          e.target.value = '';
+        }}
+      />
 
       {selectedPhotoIndex === null && !showModal && (
         <button
