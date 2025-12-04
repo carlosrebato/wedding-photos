@@ -1380,7 +1380,7 @@ export default function Home() {
               title="Descargar"
             >
               <img
-                src="public/assets/download.png"
+                src="/assets/download.png"
                 alt="Descargar"
                 className="w-8 h-8"
               />
